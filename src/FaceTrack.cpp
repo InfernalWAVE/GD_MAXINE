@@ -51,7 +51,6 @@ using namespace godot;
 #define strcasecmp _stricmp
 #endif /* _MSC_VER */
 
-#define DEFAULT_FACE_MODEL    "face_model2.nvf"
 
 #define BAIL(err, code) \
   do {                  \
@@ -144,170 +143,11 @@ void FaceTrack::_ready() {
                 UtilityFunctions::print("failed to located NVAR model dir env var");
             }
 
-            // solve expressions
-            NvCV_Status expression_err;
-            NvAR_FeatureHandle expression_handle;
-            CUstream expression_stream = 0;
-            std::vector<NvAR_Point2f> _expression_landmarks;
-            std::vector<NvAR_Rect> _outputBboxData;
-            NvAR_BBoxes        _outputBboxes;
-            std::vector<float> _expressions, _expressionZeroPoint, _expressionScale, _expressionExponent, _eigenvalues, _landmark_confidence;
-            NvCVImage frame_image;
-             struct Pose {
-                NvAR_Quaternion rotation;
-                NvAR_Vector3f translation;
-                float* data() { return &rotation.x; }
-                const float* data() const { return &rotation.x; }
-            };            
-            Pose _pose;
-
-            unsigned _filtering = 0;
-            unsigned _pose_mode = 0;
-            unsigned _expr_mode = 2;
-            unsigned _enable_cheek_puff = 0;
-            unsigned _exprCount;
-
-            expression_err = NvAR_Create(NvAR_Feature_FaceExpressions, &expression_handle);
-            if (expression_err!=NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to create facial expression feature");
-            }
-
-            expression_err = NvAR_SetString(expression_handle, NvAR_Parameter_Config(ModelDir), modelPath.c_str());
-            if (expression_err!=NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to set model dir");
-            }
-
-
-            expression_err = NvAR_SetCudaStream(expression_handle, NvAR_Parameter_Config(CUDAStream), expression_stream);
-            if (expression_err!=NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to set CUDA stream");
-            }
-
-            expression_err = NvAR_SetU32(expression_handle, NvAR_Parameter_Config(Temporal), _filtering);
-            if (expression_err!=NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to set temporal filtering");
-            }
-
-            expression_err = NvAR_SetU32(expression_handle, NvAR_Parameter_Config(PoseMode), _pose_mode);
-            if (expression_err!=NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to set pose_mode");
-            }
-
-            expression_err = NvAR_SetU32(expression_handle, NvAR_Parameter_Config(EnableCheekPuff), _enable_cheek_puff);
-            if (expression_err!=NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to set cheek puff");
-            }
-
-            expression_err = NvAR_Load(expression_handle);
-            if (expression_err!=NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to load facial expression feature");
-            } else {
-                UtilityFunctions::print("facial expression feature loaded");
-            }
-
-            _outputBboxData.assign(25, { 0.f, 0.f, 0.f, 0.f });
-            _outputBboxes.boxes = _outputBboxData.data();
-            _outputBboxes.max_boxes = (uint8_t)_outputBboxData.size();
-            _outputBboxes.num_boxes = 0;
-            expression_err = NvAR_SetObject(expression_handle, NvAR_Parameter_Output(BoundingBoxes), &_outputBboxes, sizeof(NvAR_BBoxes));
-            if (expression_err!=NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to set bbox object");
-            }
-
-            _expression_landmarks.resize(126);
-            expression_err = NvAR_SetObject(expression_handle, NvAR_Parameter_Output(Landmarks), _expression_landmarks.data(), sizeof(NvAR_Point2f));
-            if (expression_err!=NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to set landmarks object");
-            }
-
-            _landmark_confidence.resize(126);
-            expression_err = NvAR_SetF32Array(expression_handle, NvAR_Parameter_Output(LandmarksConfidence), _landmark_confidence.data(), 126);
-            if (expression_err!=NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to set landmark confidence array");
-            }
-
-            expression_err = NvAR_GetU32(expression_handle, NvAR_Parameter_Config(ExpressionCount), &_exprCount);
-            if (expression_err!=NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to get expression count");
-            }
-
-            _expressions.resize(_exprCount);
-            _expressionZeroPoint.resize(_exprCount, 0.0f);
-            _expressionScale.resize(_exprCount, 1.0f);
-            _expressionExponent.resize(_exprCount, 1.0f);
-
-            expression_err = NvAR_SetF32Array(expression_handle, NvAR_Parameter_Output(ExpressionCoefficients), _expressions.data(), _exprCount);
-            if (expression_err!=NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to set expression coefficient array");
-            } else {
-                UtilityFunctions::print("successfully set expression coefficient array");
-            }
-
-            ConvertMatToNvCVImage(frame, &frame_image); // Ensure the implementation of this function
-
-            expression_err = NvAR_SetObject(expression_handle, NvAR_Parameter_Input(Image), &frame_image, sizeof(frame_image));
-            if (expression_err != NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to set the source image for expression analysis");
-            }
-
-            float cameraIntrinsicParams[3] = {static_cast<float>(inputHeight), inputWidth / 2.0f, inputHeight / 2.0f}; // focal length, cx, cy
-            expression_err = NvAR_SetF32Array(expression_handle, NvAR_Parameter_Input(CameraIntrinsicParams), cameraIntrinsicParams, 3);
-            if (expression_err != NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to set camera intrinsic parameters");
-            }
-
-            expression_err = NvAR_SetObject(expression_handle, NvAR_Parameter_Output(Pose), &_pose.rotation, sizeof(NvAR_Quaternion));
-            if (expression_err != NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to set pose rotation object");
-            }
-
-            expression_err = NvAR_SetObject(expression_handle, NvAR_Parameter_Output(PoseTranslation), &_pose.translation, sizeof(NvAR_Vector3f));
-            if (expression_err != NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to set pose rotation object");
-            }
-
-            // Run the facial expression feature
-            expression_err = NvAR_Run(expression_handle);
-            if (expression_err != NVCV_SUCCESS) {
-                UtilityFunctions::print("failed to run facial expression feature");
-            } else {
-                UtilityFunctions::print("facial expression feature run successfully");
-            }
-
-            // Process and print the expression coefficients
-            // After running the facial expression feature
-            for (size_t i = 0; i < _expressions.size(); ++i) {
-                std::cout << "Expression Coefficient " << i << ": " << _expressions[i] << std::endl;
-            }
-
-            // Cleanup for expression handling
-            NvAR_Destroy(expression_handle); // Destroy expression feature handle
-
-            // Deallocate NvCVImage used for capturing frame
-            NvCVImage_Dealloc(&frame_image);
-
-            // Deallocate std::vectors
-            _expression_landmarks.clear();
-            _outputBboxData.clear();
-            _expressions.clear();
-            _expressionZeroPoint.clear();
-            _expressionScale.clear();
-            _expressionExponent.clear();
-            _eigenvalues.clear();
-            _landmark_confidence.clear();
-
-// Note: CUstream (expression_stream) does not require manual deallocation
-// if created using CUDA's default stream creation methods.
-
-// Other variables like Pose, unsigned ints don't require explicit deallocation.
-
-
             // setup for face mesh generation
             UtilityFunctions::print("intializing FaceEngine...");
             face_ar_engine.setAppMode(FaceEngine::mode::faceMeshGeneration);
             
             // set model path
-        
             nvErr = face_ar_engine.createFeatures(modelPath.c_str(), 1, FaceEngine::mode::faceMeshGeneration);
             if (nvErr != FaceEngine::Err::errNone) {
                 UtilityFunctions::print("FaceEngine initialization failed");
@@ -316,6 +156,7 @@ void FaceTrack::_ready() {
                 UtilityFunctions::print("FaceEngine successfully initialized");
             } 
             
+            // initialize feature params
             UtilityFunctions::print("initializing FaceEngine featureIOParams...");
             FaceEngine::Err err = face_ar_engine.initFeatureIOParams();
             if (err != FaceEngine::Err::errNone ) {
@@ -323,61 +164,81 @@ void FaceTrack::_ready() {
             } else {
                 UtilityFunctions::print("FaceEngine featureIOParams successfully intialized");
             }
-        
-            if (!frame.empty()) {
-                UtilityFunctions::print("acquiring face box and landmarks...");
-                int num_landmarks = face_ar_engine.getNumLandmarks();
-                std::vector<NvAR_Point2f> facial_landmarks(num_landmarks);
 
+            // process frame with FaceEngine
+            if (!frame.empty()) {
+                // fit face model
+                UtilityFunctions::print("acquiring face box and landmarks...");
                 nvErr = face_ar_engine.fitFaceModel(frame);
                 if (nvErr != FaceEngine::Err::errNone) {
                     UtilityFunctions::print("fit face model failed");
                 } else {
                     UtilityFunctions::print("face model fit to frame!");
+                    
+                    // capture mesh
+                    UtilityFunctions::print("capturing face mesh for engine");
                     captured_mesh = convert_NVARmesh_to_godot();
+                    
+                    // capture landmarks
+                    UtilityFunctions::print("capturing landmarks for engine");
+                    captured_facial_landmarks.clear();
+                    
+                    unsigned int numLandmarks = face_ar_engine.getNumLandmarks();
+                    NvAR_Point2f* landmarks = face_ar_engine.getLandmarks();
+
+                    for (unsigned int i = 0; i < numLandmarks; ++i) {
+                        captured_facial_landmarks.append(Vector2(landmarks[i].x, landmarks[i].y));
+                    }
+
+                    // capture bbox
+                    output_bbox = *face_ar_engine.getLargestBox();
+
+                    // capture facial expressions
+                    UtilityFunctions::print("capturing facial expressions for engine");
+                    unsigned int numCoefficients = face_ar_engine.getNumExpressionCoefficients();
+                    float* expressionCoefficients = face_ar_engine.getExpressionCoefficients();
+
+                    for (unsigned int i = 0; i < numCoefficients; ++i) {
+                        godot::String coefficientStr = UtilityFunctions::str(expressionCoefficients[i]);
+                        UtilityFunctions::print("Coefficient " + UtilityFunctions::str(i) + ": " + coefficientStr);
+                    }
+
+                    // capture pose
+                    UtilityFunctions::print("capturing pose for engine");
+                    NvAR_Quaternion* pose = face_ar_engine.getPose();
+                    if (pose != nullptr) {
+                        godot::String poseStr = "Quaternion Pose: [" 
+                                            + UtilityFunctions::str(pose->x) + ", " 
+                                            + UtilityFunctions::str(pose->y) + ", " 
+                                            + UtilityFunctions::str(pose->z) + ", " 
+                                            + UtilityFunctions::str(pose->w) + "]";
+                        UtilityFunctions::print(poseStr);
+                    } else {
+                        UtilityFunctions::print("Pose is null.");
+                    }
+
+
                 }
 
-                face_ar_engine.destroyFeatures();
-                face_ar_engine.setAppMode(FaceEngine::mode::landmarkDetection);
-                nvErr = face_ar_engine.createFeatures(modelPath.c_str(), 1, FaceEngine::mode::landmarkDetection);
-                if (nvErr != FaceEngine::Err::errNone) {
-                    UtilityFunctions::print("FaceEngine initialization failed (2nd)");
-                }
-                else {
-                    UtilityFunctions::print("FaceEngine successfully initialized (2nd)");
-                } 
-
-                FaceEngine::Err err = face_ar_engine.initFeatureIOParams();
-                if (err != FaceEngine::Err::errNone ) {
-                    UtilityFunctions::print("FaceEngine featureIOParams failed to initialize! (2nd)");
-                } else {
-                    UtilityFunctions::print("FaceEngine featureIOParams successfully intialized (2nd)");
-                }
-
-                nvErr = face_ar_engine.acquireFaceBoxAndLandmarks(frame, facial_landmarks.data(), output_bbox, 0);
+                // annotate frame
                 if (nvErr == FaceEngine::Err::errNone) {
                     // Draw a rectangle around the detected face
-                   
-                    UtilityFunctions::print("Face Box acquired, processing...");
+                    UtilityFunctions::print("drawing face box");
                     if (output_bbox.width > 0 && output_bbox.height > 0) {
                         cv::rectangle(frame, 
                             cv::Point(lround(output_bbox.x), lround(output_bbox.y)), 
                             cv::Point(lround(output_bbox.x + output_bbox.width), lround(output_bbox.y + output_bbox.height)), 
                             cv::Scalar(0, 255, 0), 2);
-
-                        UtilityFunctions::print("face detected!");
                     }
 
-                    UtilityFunctions::print("drawing landmarks...");
-                    for (const auto& landmark : facial_landmarks) {
-                       cv::circle(frame, cv::Point(static_cast<int>(landmark.x), static_cast<int>(landmark.y)), 2, cv::Scalar(0, 0, 255), -1);
-                    }
+                    // draw landmark locations
+                    UtilityFunctions::print("drawing landmarks");
+                    unsigned int numLandmarks = face_ar_engine.getNumLandmarks(); // Assuming you have this method
+                    NvAR_Point2f* landmarks = face_ar_engine.getLandmarks();
 
-                    UtilityFunctions::print("capturing landmarks for engine");
-                    captured_facial_landmarks.clear();
-
-                    for (const auto& landmark : facial_landmarks) {
-                        captured_facial_landmarks.append(Vector2(landmark.x, landmark.y));
+                    for (unsigned int i = 0; i < numLandmarks; ++i) {
+                        const NvAR_Point2f& landmark = landmarks[i];
+                        cv::circle(frame, cv::Point(static_cast<int>(landmark.x), static_cast<int>(landmark.y)), 2, cv::Scalar(0, 0, 255), -1);
                     }
 
                 } else if (nvErr == face_ar_engine.FaceEngine::Err::errRun) {
@@ -386,8 +247,10 @@ void FaceTrack::_ready() {
                     UtilityFunctions::print("face detection failed, unknown case");
                 }
                 
+                // display annotated frame
                 cv::imshow("captured frame", frame);
 
+                // capture annotated frame
                 UtilityFunctions::print("capturing frame for engine");
                 captured_frame_texture = convert_frame_to_texture(frame);
             }
@@ -555,20 +418,6 @@ Ref<ArrayMesh> FaceTrack::convert_NVARmesh_to_godot() {
 
     return godot_mesh;
 }
-
-NvCV_Status FaceTrack::ConvertMatToNvCVImage(const cv::Mat& mat, NvCVImage* nvImage) {
-  if (!mat.empty() && mat.depth() == CV_8U) {
-    NvCV_Status status = NvCVImage_Alloc(nvImage, mat.cols, mat.rows, NVCV_BGR, NVCV_U8, NVCV_CHUNKY, NVCV_CPU, 1);
-    if (status != NVCV_SUCCESS) return status;
-
-    // Assuming BGR format and contiguous memory in cv::Mat
-    memcpy(nvImage->pixels, mat.data, mat.total() * mat.elemSize());
-    return NVCV_SUCCESS;
-  } else {
-    return NVCV_ERR_FEATURENOTFOUND;
-  }
-}
-
 
 
 

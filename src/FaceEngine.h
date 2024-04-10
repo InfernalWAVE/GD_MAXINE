@@ -175,6 +175,7 @@ class FaceEngine {
   std::vector<NvAR_Point2f> facial_landmarks;
   std::vector<float> facial_landmarks_confidence;
   std::vector<NvAR_Quaternion> facial_pose;
+  std::vector<NvAR_Point3f> facial_position;
   NvAR_FaceMesh* face_mesh{};
   std::vector<NvAR_Vector3f> m_vertices;
   std::vector<NvAR_Vector3u16> m_triangles;

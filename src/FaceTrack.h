@@ -59,8 +59,6 @@ public:
     Ref<ArrayMesh> get_captured_mesh() const;
 
     Ref<ArrayMesh> convert_NVARmesh_to_godot();
-    
-    NvCV_Status ConvertMatToNvCVImage(const cv::Mat& mat, NvCVImage* nvImage);
 };
 
 }
