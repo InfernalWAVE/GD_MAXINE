@@ -8,6 +8,7 @@
 
 #include <opencv2/opencv.hpp>
 #include "FaceEngine.h"
+#include "BodyEngine.h"
 
 namespace godot {
 
@@ -19,6 +20,7 @@ private:
     cv::VideoCapture cap;
     cv::Mat frame;
     FaceEngine face_ar_engine;
+    BodyEngine body_ar_engine;
     static const char windowTitle[];
     FaceEngine::Err nvErr;
     NvAR_Rect output_bbox;

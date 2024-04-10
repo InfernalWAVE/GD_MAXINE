@@ -111,28 +111,24 @@ FaceTrack::~FaceTrack() {
 }
 
 void FaceTrack::_ready() {
+    // if game in game
     if(!Engine::get_singleton()->is_editor_hint()){
-        UtilityFunctions::print("hello from ready");
+        
+        // open camera
         if (should_run) {
             UtilityFunctions::print("opening cv::VideoCapture");
             cap.open(0);
         }
 
+        // check if camera opened
         if(cap.isOpened()){
             UtilityFunctions::print("cv::VideoCapture open");
 
+            // read frame from camera
             UtilityFunctions::print("reading frame");
             cap.read(frame);
 
-            int inputWidth = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
-            int inputHeight = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
-            UtilityFunctions::print("input height: " + UtilityFunctions::str(inputHeight));
-            UtilityFunctions::print("input width: " + UtilityFunctions::str(inputWidth));
-            face_ar_engine.setInputImageWidth(inputWidth);
-            face_ar_engine.setInputImageHeight(inputHeight);
-            face_ar_engine.setFaceStabilization(true);
-            face_ar_engine.setNumLandmarks(126);
-            
+            // get model directory
             const char* _model_path = getenv("NVAR_MODEL_DIR");
             if (_model_path) {
                 modelPath = _model_path;
@@ -143,30 +139,95 @@ void FaceTrack::_ready() {
                 UtilityFunctions::print("failed to located NVAR model dir env var");
             }
 
+            // initialize body engine
+            UtilityFunctions::print("intializing BodyEngine");
+            int numKeyPoints = body_ar_engine.getNumKeyPoints();
+            NvAR_BBoxes body_bbox;
+            std::vector<NvAR_Point2f> keypoints2D(numKeyPoints * 8);
+            std::vector<NvAR_Point3f> keypoints3D(numKeyPoints * 8);
+            std::vector<NvAR_Quaternion> jointAngles(numKeyPoints * 8);
+            BodyEngine::Err body_err = BodyEngine::Err::errNone;
+
+            UtilityFunctions::print("setting up for 3D body pose tracking");
+            body_ar_engine.setAppMode(BodyEngine::mode::keyPointDetection);
+            body_ar_engine.setMode(0); // high-quality mode
+            body_ar_engine.setBodyStabilization(1);
+            body_ar_engine.useCudaGraph(1);
+            
+            body_err = body_ar_engine.createFeatures(modelPath.c_str(), 1);
+            if (body_err != BodyEngine::Err::errNone) {
+                UtilityFunctions::print("failed to create features for BodyEngine");
+            }
+
+            body_err = body_ar_engine.initFeatureIOParams();
+            if (body_err != BodyEngine::Err::errNone) {
+                UtilityFunctions::print("failed to initialize feature io params for BodyEngine");
+            }
+
+            // initialize face engine
+            UtilityFunctions::print("intializing FaceEngine");
+            int inputWidth = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
+            int inputHeight = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
+            UtilityFunctions::print("input height: " + UtilityFunctions::str(inputHeight));
+            UtilityFunctions::print("input width: " + UtilityFunctions::str(inputWidth));
+            face_ar_engine.setInputImageWidth(inputWidth);
+            face_ar_engine.setInputImageHeight(inputHeight);
+            face_ar_engine.setFaceStabilization(true);
+            face_ar_engine.setNumLandmarks(126);
+            
             // setup for face mesh generation
-            UtilityFunctions::print("intializing FaceEngine...");
+            UtilityFunctions::print("setting up for 3D facial mesh tracking");
             face_ar_engine.setAppMode(FaceEngine::mode::faceMeshGeneration);
             
-            // set model path
             nvErr = face_ar_engine.createFeatures(modelPath.c_str(), 1, FaceEngine::mode::faceMeshGeneration);
             if (nvErr != FaceEngine::Err::errNone) {
-                UtilityFunctions::print("FaceEngine initialization failed");
-            }
-            else {
-                UtilityFunctions::print("FaceEngine successfully initialized");
+                UtilityFunctions::print("failed to create features for FaceEngine");
             } 
             
-            // initialize feature params
-            UtilityFunctions::print("initializing FaceEngine featureIOParams...");
             FaceEngine::Err err = face_ar_engine.initFeatureIOParams();
             if (err != FaceEngine::Err::errNone ) {
-                UtilityFunctions::print("FaceEngine featureIOParams failed to initialize!");
-            } else {
-                UtilityFunctions::print("FaceEngine featureIOParams successfully intialized");
+                UtilityFunctions::print("failed to initialize feature io params for FaceEngine");
             }
 
             // process frame with FaceEngine
             if (!frame.empty()) {
+                // fit body model
+                UtilityFunctions::print("acquiring body box and keypoints...");
+                unsigned body_fit_err = body_ar_engine.acquireBodyBoxAndKeyPoints(frame, keypoints2D.data(), keypoints3D.data(), jointAngles.data(), &body_bbox, 0);
+                if (body_fit_err != 1) {
+                    UtilityFunctions::print("failed to acquire body box");
+                } else {
+                    UtilityFunctions::print("successfully acquired body box");
+                    // Validate body boxes
+                    if (body_ar_engine.output_bboxes.num_boxes == 0) {
+                        UtilityFunctions::print("zero body boxes");
+                    } else {
+                        UtilityFunctions::print("at least one body box detected");
+
+                        // validate jointAngles
+                        printf("jointAngles: [\n");
+                        for (const auto &angle : jointAngles) {
+                            printf("%7.1f%7.1f%7.1f%7.1f\n", angle.x, angle.y, angle.z, angle.w);
+                        }
+                        printf("]\n");
+
+                        // validate 2D keypoints
+                        printf("keyPoints: [\n");
+                        for (const auto &pt : keypoints2D) {
+                            printf("%7.1f%7.1f\n", pt.x, pt.y);
+                        }
+                        printf("]\n");
+
+                        // validate 3D keypoints
+                        printf("3D keyPoints: [\n");
+                        for (const auto& pt : keypoints3D) {
+                            printf("%7.1f%7.1f%7.1f\n", pt.x, pt.y, pt.z);
+                        }
+                        printf("]\n");
+
+                    }
+                }
+                
                 // fit face model
                 UtilityFunctions::print("acquiring face box and landmarks...");
                 nvErr = face_ar_engine.fitFaceModel(frame);
