@@ -1,6 +1,7 @@
 #include "register_types.h"
 
 #include "FaceTrack.h"
+#include "ExpressionTrack.h"
 
 
 #include <gdextension_interface.h>
@@ -18,6 +19,7 @@ void initialize_example_module(ModuleInitializationLevel p_level) {
 	}
 
 	ClassDB::register_class<FaceTrack>();
+	ClassDB::register_class<ExpressionTrack>();
 
     // register additional classes here
 
