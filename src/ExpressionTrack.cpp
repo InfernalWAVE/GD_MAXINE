@@ -58,7 +58,15 @@ using namespace godot;
 
 
 void ExpressionTrack::_bind_methods() {
-
+  ClassDB::bind_method(D_METHOD("get_landmarks"), &ExpressionTrack::get_landmarks);
+  ClassDB::bind_method(D_METHOD("get_landmark_count"), &ExpressionTrack::get_landmark_count);
+  ClassDB::bind_method(D_METHOD("get_expression_count"), &ExpressionTrack::get_expression_count);
+  ClassDB::bind_method(D_METHOD("get_expressions"), &ExpressionTrack::get_expressions);
+  ClassDB::bind_method(D_METHOD("get_landmark_confidence"), &ExpressionTrack::get_landmark_confidence);
+  ClassDB::bind_method(D_METHOD("get_pose_rotation"), &ExpressionTrack::get_pose_rotation);
+  ClassDB::bind_method(D_METHOD("get_pose_translation"), &ExpressionTrack::get_pose_translation);
+  ClassDB::bind_method(D_METHOD("get_pose_transform"), &ExpressionTrack::get_pose_transform);
+  ClassDB::bind_method(D_METHOD("get_bounding_boxes"), &ExpressionTrack::get_bounding_boxes);
 }
 
 ExpressionTrack::ExpressionTrack() {
@@ -119,7 +127,7 @@ void ExpressionTrack::_ready() {
       height = (unsigned)_vidIn.get(CV_CAP_PROP_FRAME_HEIGHT);
       frame_rate = (unsigned)_vidIn.get(CV_CAP_PROP_FPS);
 
-      static const int fps_precision = 1000; // round frame rate for opencv compatibility
+      static const int fps_precision = FPS_PRECISION; // round frame rate for opencv compatibility
       frame_rate = static_cast<int>((frame_rate + 0.5) * fps_precision) / static_cast<double>(fps_precision);
 
       UtilityFunctions::print("Video Width: ", UtilityFunctions::str(width));
@@ -150,7 +158,7 @@ void ExpressionTrack::_ready() {
         UtilityFunctions::print("failed to set camera intrinsic params for facial expression feature handle");
       }
 
-      const unsigned landmarkCount = 126;
+      _landmarkCount = NUM_LANDMARKS;
       nvErr = NvAR_Create(NvAR_Feature_FaceExpressions, &_featureHan);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to create facial expression feature handle");
@@ -190,14 +198,14 @@ void ExpressionTrack::_ready() {
         UtilityFunctions::print("failed to set bounding boxes output for facial expression feature handle");
       }
 
-      _landmarks.resize(landmarkCount);
+      _landmarks.resize(_landmarkCount);
       nvErr = NvAR_SetObject(_featureHan, NvAR_Parameter_Output(Landmarks), _landmarks.data(), sizeof(NvAR_Point2f));
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set landmarks output for facial expression feature handle");
       }
 
-      _landmarkConfidence.resize(landmarkCount);
-      nvErr = NvAR_SetF32Array(_featureHan, NvAR_Parameter_Output(LandmarksConfidence), _landmarkConfidence.data(), landmarkCount);
+      _landmarkConfidence.resize(_landmarkCount);
+      nvErr = NvAR_SetF32Array(_featureHan, NvAR_Parameter_Output(LandmarksConfidence), _landmarkConfidence.data(), _landmarkCount);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set landmark confidence output for facial expression feature handle");
       }
@@ -248,7 +256,7 @@ void ExpressionTrack::_ready() {
           UtilityFunctions::print("successfully ran facial expression feature");
 
           // validate expression capture
-          printPoseRotation();
+          /* printPoseRotation();
 
           if (_poseMode == 1) {
             printPoseTranslation();
@@ -257,7 +265,7 @@ void ExpressionTrack::_ready() {
           printExpressionCoefficients();
           printLandmarkLocations();
           printLandmarkConfidence();
-          printBoundingBoxes();
+          printBoundingBoxes(); */
         }
 
 
@@ -274,82 +282,158 @@ void ExpressionTrack::_ready() {
   }
 }
 
+void ExpressionTrack::_process(double delta) {
+	
+}
+
 void ExpressionTrack::printPoseRotation() {
-    UtilityFunctions::print("\nFacial Pose Rotation:");
-    
-    const auto& rotation = _pose.rotation;
-    godot::String rotationStr = "Pose Rotation Quaternion: (" 
-    + UtilityFunctions::str(rotation.x) + ", " 
-    + UtilityFunctions::str(rotation.y) + ", " 
-    + UtilityFunctions::str(rotation.z) + ", " 
-    + UtilityFunctions::str(rotation.w) + ")";
-    UtilityFunctions::print(rotationStr);
+  UtilityFunctions::print("\nFacial Pose Rotation:");
+  
+  const auto& rotation = _pose.rotation;
+  godot::String rotationStr = "Pose Rotation Quaternion: (" 
+  + UtilityFunctions::str(rotation.x) + ", " 
+  + UtilityFunctions::str(rotation.y) + ", " 
+  + UtilityFunctions::str(rotation.z) + ", " 
+  + UtilityFunctions::str(rotation.w) + ")";
+  UtilityFunctions::print(rotationStr);
 }
 
 void ExpressionTrack::printExpressionCoefficients() {
-    UtilityFunctions::print("\nFacial Expression Coefficients:");
+  UtilityFunctions::print("\nFacial Expression Coefficients:");
 
-    godot::String coeffsStr = "";
-    for (size_t i = 0; i < _expressions.size(); ++i) {
-        coeffsStr += UtilityFunctions::str(_expressions[i]);
-        if (i < _expressions.size() - 1) {
-            coeffsStr += ", ";
-        }
-    }
-    UtilityFunctions::print(coeffsStr);
+  godot::String coeffsStr = "";
+  for (size_t i = 0; i < _expressions.size(); ++i) {
+      coeffsStr += UtilityFunctions::str(_expressions[i]);
+      if (i < _expressions.size() - 1) {
+          coeffsStr += ", ";
+      }
+  }
+  UtilityFunctions::print(coeffsStr);
 }
 
 void ExpressionTrack::printLandmarkLocations() {
-    UtilityFunctions::print("\nFacial Landmark Locations:");
-    
-    godot::String landmarksStr = "";
-    for (size_t i = 0; i < _landmarks.size(); ++i) {
-        landmarksStr += "(" + UtilityFunctions::str(_landmarks[i].x) + ", " 
-                            + UtilityFunctions::str(_landmarks[i].y) + ")";
-        if (i < _landmarks.size() - 1) {
-            landmarksStr += ", ";
-        }
-    }
-    UtilityFunctions::print(landmarksStr);
+  UtilityFunctions::print("\nFacial Landmark Locations:");
+  
+  godot::String landmarksStr = "";
+  for (size_t i = 0; i < _landmarks.size(); ++i) {
+      landmarksStr += "(" + UtilityFunctions::str(_landmarks[i].x) + ", " 
+                          + UtilityFunctions::str(_landmarks[i].y) + ")";
+      if (i < _landmarks.size() - 1) {
+          landmarksStr += ", ";
+      }
+  }
+  UtilityFunctions::print(landmarksStr);
 }
 
 void ExpressionTrack::printBoundingBoxes() {
-    UtilityFunctions::print("\nBounding Boxes: (x, y, width, height)");
+  UtilityFunctions::print("\nBounding Boxes: (x, y, width, height)");
 
-    godot::String bboxesStr = "";
-    for (size_t i = 0; i < _outputBboxes.num_boxes; ++i) {
-        const auto& box = _outputBboxes.boxes[i];
-        bboxesStr += "("+ UtilityFunctions::str(box.x) + ", " 
-                        + UtilityFunctions::str(box.y) + ", " 
-                        + UtilityFunctions::str(box.width) + ", " 
-                        + UtilityFunctions::str(box.height) + ")";
-        if (i < _outputBboxes.num_boxes - 1) {
-            bboxesStr += ", ";
-        }
-    }
-    UtilityFunctions::print(bboxesStr);
+  godot::String bboxesStr = "";
+  for (size_t i = 0; i < _outputBboxes.num_boxes; ++i) {
+      const auto& box = _outputBboxes.boxes[i];
+      bboxesStr += "("+ UtilityFunctions::str(box.x) + ", " 
+                      + UtilityFunctions::str(box.y) + ", " 
+                      + UtilityFunctions::str(box.width) + ", " 
+                      + UtilityFunctions::str(box.height) + ")";
+      if (i < _outputBboxes.num_boxes - 1) {
+          bboxesStr += ", ";
+      }
+  }
+  UtilityFunctions::print(bboxesStr);
 }
 
 void ExpressionTrack::printLandmarkConfidence() {
-    UtilityFunctions::print("\nFacial Landmark Confidence:");
+  UtilityFunctions::print("\nFacial Landmark Confidence:");
 
-    godot::String confidenceStr = "";
-    for (size_t i = 0; i < _landmarkConfidence.size(); ++i) {
-        confidenceStr += UtilityFunctions::str(_landmarkConfidence[i]);
-        if (i < _landmarkConfidence.size() - 1) {
-            confidenceStr += ", ";
-        }
-    }
-    UtilityFunctions::print(confidenceStr);
+  godot::String confidenceStr = "";
+  for (size_t i = 0; i < _landmarkConfidence.size(); ++i) {
+      confidenceStr += UtilityFunctions::str(_landmarkConfidence[i]);
+      if (i < _landmarkConfidence.size() - 1) {
+          confidenceStr += ", ";
+      }
+  }
+  UtilityFunctions::print(confidenceStr);
 }
 
 void ExpressionTrack::printPoseTranslation() {
-    UtilityFunctions::print("\nFacial Pose Translation:");
+  UtilityFunctions::print("\nFacial Pose Translation:");
 
-    const auto& translation = _pose.translation;
-    godot::String translationStr = "(" 
-        + UtilityFunctions::str(translation.vec[0]) + ", "   // X component
-        + UtilityFunctions::str(translation.vec[1]) + ", "   // Y component
-        + UtilityFunctions::str(translation.vec[2]) + ")";   // Z component
-    UtilityFunctions::print(translationStr);
+  const auto& translation = _pose.translation;
+  godot::String translationStr = "(" 
+      + UtilityFunctions::str(translation.vec[0]) + ", "   // X component
+      + UtilityFunctions::str(translation.vec[1]) + ", "   // Y component
+      + UtilityFunctions::str(translation.vec[2]) + ")";   // Z component
+  UtilityFunctions::print(translationStr);
+}
+
+Array ExpressionTrack::get_landmarks() const {
+  Array landmarks;
+  for (const auto& landmark : _landmarks) {
+      landmarks.push_back(Vector2(landmark.x, landmark.y));
+  }
+  return landmarks;
+}
+
+int ExpressionTrack::get_landmark_count() const {
+  return _landmarkCount;
+}
+
+int ExpressionTrack::get_expression_count() const {
+  return _exprCount;
+}
+
+Array ExpressionTrack::get_expressions() const {
+  Array expressions;
+  for (const auto& expression : _expressions) {
+      expressions.push_back(expression);
+  }
+  return expressions;
+}
+
+Array ExpressionTrack::get_landmark_confidence() const {
+  Array confidences;
+  for (const auto& confidence : _landmarkConfidence) {
+      confidences.push_back(confidence);
+  }
+  return confidences;
+}
+
+Quaternion ExpressionTrack::get_pose_rotation() const {
+  const auto& rotation = _pose.rotation;
+  return Quaternion(rotation.x, rotation.y, rotation.z, rotation.w);
+}
+
+
+Vector3 ExpressionTrack::get_pose_translation() const {
+  if (_poseMode == 1) {
+      const auto& translation = _pose.translation;
+      return Vector3(translation.vec[0], translation.vec[1], translation.vec[2]);
+  } else {
+      return Vector3(0, 0, 0);
+  }
+}
+
+Transform3D ExpressionTrack::get_pose_transform() const {
+    Quaternion rotation_quat = get_pose_rotation();
+    Basis basis = Basis(rotation_quat).orthonormalized();
+    Vector3 translation = get_pose_translation();
+
+    return Transform3D(basis, translation);
+}
+
+Dictionary ExpressionTrack::bounding_box_to_dict(const NvAR_Rect& box) const {
+    Dictionary bbox;
+    bbox["x"] = box.x;
+    bbox["y"] = box.y;
+    bbox["width"] = box.width;
+    bbox["height"] = box.height;
+    return bbox;
+}
+
+Array ExpressionTrack::get_bounding_boxes() const {
+    Array boxes;
+    for (size_t i = 0; i < _outputBboxes.num_boxes; ++i) {
+        boxes.push_back(bounding_box_to_dict(_outputBboxes.boxes[i]));
+    }
+    return boxes;
 }

@@ -20,6 +20,8 @@
 #include <opencv2/opencv.hpp>
 
 #define NUM_CAMERA_INTRINSIC_PARAMS 3
+#define NUM_LANDMARKS 126
+#define FPS_PRECISION 1000
 
 namespace godot {
 
@@ -78,12 +80,25 @@ public:
     ExpressionTrack();
     ~ExpressionTrack();
     void _ready() override;
+    void _process(double delta) override;
+
     void printPoseRotation();
     void printExpressionCoefficients();
     void printLandmarkLocations();
     void printBoundingBoxes();
     void printLandmarkConfidence();
     void printPoseTranslation();
+
+    Array get_landmarks() const;
+    int get_landmark_count() const;
+    int get_expression_count() const;
+    Array get_expressions() const;
+    Array get_landmark_confidence() const;
+    Vector3 get_pose_translation() const;
+    Quaternion get_pose_rotation() const;
+    Transform3D get_pose_transform() const;
+    Dictionary bounding_box_to_dict(const NvAR_Rect& box) const;
+    Array get_bounding_boxes() const;
 };
 
 }

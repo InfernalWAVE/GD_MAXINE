@@ -1,4 +1,6 @@
-[gd_scene format=3 uid="uid://c6bmlyk5rs0eu"]
+[gd_scene load_steps=2 format=3 uid="uid://c6bmlyk5rs0eu"]
+
+[ext_resource type="Script" path="res://test_expression_track.gd" id="1_wasnf"]
 
 [node name="Control" type="Control"]
 layout_mode = 3
@@ -8,4 +10,13 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="ExpressionTrack" type="ExpressionTrack" parent="."]
+[node name="ExpressionTrack" type="ExpressionTrack" parent="." node_paths=PackedStringArray("capture_timer")]
+script = ExtResource("1_wasnf")
+capture_timer = NodePath("../Timer")
+
+[node name="Timer" type="Timer" parent="."]
+wait_time = 5.0
+one_shot = true
+autostart = true
+
+[connection signal="timeout" from="Timer" to="ExpressionTrack" method="_on_timer_timeout"]
