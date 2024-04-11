@@ -4,11 +4,7 @@
 
 [node name="Control" type="Control"]
 layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+anchors_preset = 0
 
 [node name="ExpressionTrack" type="ExpressionTrack" parent="." node_paths=PackedStringArray("capture_timer")]
 script = ExtResource("1_wasnf")
@@ -16,7 +12,13 @@ capture_timer = NodePath("../Timer")
 
 [node name="Timer" type="Timer" parent="."]
 wait_time = 5.0
-one_shot = true
 autostart = true
 
+[node name="Button" type="Button" parent="."]
+layout_mode = 1
+offset_right = 358.0
+offset_bottom = 165.0
+text = "Print Facial Capture Info"
+
 [connection signal="timeout" from="Timer" to="ExpressionTrack" method="_on_timer_timeout"]
+[connection signal="pressed" from="Button" to="ExpressionTrack" method="_on_button_pressed"]

@@ -8,6 +8,9 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <thread>
+#include <atomic>
+#include <mutex>
 
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/image.hpp>
@@ -69,8 +72,12 @@ private:
 
     Pose _pose;
 
-    cv::Mat _ocvSrcImg;
+    cv::Mat _ocvSrcImg, _processingFrame;
     float _cameraIntrinsicParams[NUM_CAMERA_INTRINSIC_PARAMS];
+
+    std::thread processing_thread;
+    std::atomic<bool> continue_processing{false};
+    std::mutex processing_mutex;
 
 protected:
     static void _bind_methods();
@@ -99,6 +106,9 @@ public:
     Transform3D get_pose_transform() const;
     Dictionary bounding_box_to_dict(const NvAR_Rect& box) const;
     Array get_bounding_boxes() const;
+
+    void processing_loop();
+    void start_processing_thread();
 };
 
 }

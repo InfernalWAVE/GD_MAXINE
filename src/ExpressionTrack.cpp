@@ -100,6 +100,11 @@ ExpressionTrack::~ExpressionTrack() {
   if (_featureHan) {
     NvAR_Destroy(_featureHan);
   }
+
+  continue_processing = false;
+  if (processing_thread.joinable()) {
+    processing_thread.join();
+  }
 }
 
 void ExpressionTrack::_ready() {
@@ -109,12 +114,12 @@ void ExpressionTrack::_ready() {
     // get model directory
     const char* _model_path = getenv("NVAR_MODEL_DIR");
     if (_model_path) {
-        modelPath = _model_path;
-        UtilityFunctions::print("NVAR model dir env var located at: ");
-        UtilityFunctions::print(modelPath.c_str());
+      modelPath = _model_path;
+      UtilityFunctions::print("NVAR model dir env var located at: ");
+      UtilityFunctions::print(modelPath.c_str());
 
     } else {
-        UtilityFunctions::print("failed to located NVAR model dir env var");
+      UtilityFunctions::print("failed to located NVAR model dir env var");
     }
 
     // open video capture
@@ -255,6 +260,10 @@ void ExpressionTrack::_ready() {
         } else {
           UtilityFunctions::print("successfully ran facial expression feature");
 
+          // start capture on separate thread
+          start_processing_thread();
+
+
           // validate expression capture
           /* printPoseRotation();
 
@@ -283,8 +292,33 @@ void ExpressionTrack::_ready() {
 }
 
 void ExpressionTrack::_process(double delta) {
-	
+    {
+        // lock to ensure thread-safe access to _ocvSrcImg
+        std::lock_guard<std::mutex> lock(processing_mutex);
+
+        cv::imshow("Src Image", _ocvSrcImg);
+        cv::Mat matImage(_srcImg.height, _srcImg.width, CV_8UC3, _srcImg.pixels, _srcImg.pitch);
+        cv::imshow("NvCV Image", matImage);
+
+        // assumes _ocvSrcImg has already been updated by processing_loop
+        // transfer image to GPU
+        nvErr = NvCVImage_Transfer(&_srcImg, &_srcGpu, 1.f, _stream, nullptr);
+        if (nvErr!=NVCV_SUCCESS) {
+            UtilityFunctions::print("failed to transfer image to gpu");
+            return;
+        }
+
+        // run facial expression feature
+        nvErr = NvAR_Run(_featureHan);
+        if (nvErr!=NVCV_SUCCESS) {
+            UtilityFunctions::print("failed to run facial expression feature");
+            return;
+        }
+    }
+
+    // additional process logic
 }
+
 
 void ExpressionTrack::printPoseRotation() {
   UtilityFunctions::print("\nFacial Pose Rotation:");
@@ -330,14 +364,14 @@ void ExpressionTrack::printBoundingBoxes() {
 
   godot::String bboxesStr = "";
   for (size_t i = 0; i < _outputBboxes.num_boxes; ++i) {
-      const auto& box = _outputBboxes.boxes[i];
-      bboxesStr += "("+ UtilityFunctions::str(box.x) + ", " 
-                      + UtilityFunctions::str(box.y) + ", " 
-                      + UtilityFunctions::str(box.width) + ", " 
-                      + UtilityFunctions::str(box.height) + ")";
-      if (i < _outputBboxes.num_boxes - 1) {
-          bboxesStr += ", ";
-      }
+    const auto& box = _outputBboxes.boxes[i];
+    bboxesStr += "("+ UtilityFunctions::str(box.x) + ", " 
+                    + UtilityFunctions::str(box.y) + ", " 
+                    + UtilityFunctions::str(box.width) + ", " 
+                    + UtilityFunctions::str(box.height) + ")";
+    if (i < _outputBboxes.num_boxes - 1) {
+      bboxesStr += ", ";
+    }
   }
   UtilityFunctions::print(bboxesStr);
 }
@@ -347,10 +381,10 @@ void ExpressionTrack::printLandmarkConfidence() {
 
   godot::String confidenceStr = "";
   for (size_t i = 0; i < _landmarkConfidence.size(); ++i) {
-      confidenceStr += UtilityFunctions::str(_landmarkConfidence[i]);
-      if (i < _landmarkConfidence.size() - 1) {
-          confidenceStr += ", ";
-      }
+    confidenceStr += UtilityFunctions::str(_landmarkConfidence[i]);
+    if (i < _landmarkConfidence.size() - 1) {
+      confidenceStr += ", ";
+    }
   }
   UtilityFunctions::print(confidenceStr);
 }
@@ -360,16 +394,16 @@ void ExpressionTrack::printPoseTranslation() {
 
   const auto& translation = _pose.translation;
   godot::String translationStr = "(" 
-      + UtilityFunctions::str(translation.vec[0]) + ", "   // X component
-      + UtilityFunctions::str(translation.vec[1]) + ", "   // Y component
-      + UtilityFunctions::str(translation.vec[2]) + ")";   // Z component
+    + UtilityFunctions::str(translation.vec[0]) + ", "   // X component
+    + UtilityFunctions::str(translation.vec[1]) + ", "   // Y component
+    + UtilityFunctions::str(translation.vec[2]) + ")";   // Z component
   UtilityFunctions::print(translationStr);
 }
 
 Array ExpressionTrack::get_landmarks() const {
   Array landmarks;
   for (const auto& landmark : _landmarks) {
-      landmarks.push_back(Vector2(landmark.x, landmark.y));
+    landmarks.push_back(Vector2(landmark.x, landmark.y));
   }
   return landmarks;
 }
@@ -385,7 +419,7 @@ int ExpressionTrack::get_expression_count() const {
 Array ExpressionTrack::get_expressions() const {
   Array expressions;
   for (const auto& expression : _expressions) {
-      expressions.push_back(expression);
+    expressions.push_back(expression);
   }
   return expressions;
 }
@@ -393,7 +427,7 @@ Array ExpressionTrack::get_expressions() const {
 Array ExpressionTrack::get_landmark_confidence() const {
   Array confidences;
   for (const auto& confidence : _landmarkConfidence) {
-      confidences.push_back(confidence);
+    confidences.push_back(confidence);
   }
   return confidences;
 }
@@ -406,10 +440,10 @@ Quaternion ExpressionTrack::get_pose_rotation() const {
 
 Vector3 ExpressionTrack::get_pose_translation() const {
   if (_poseMode == 1) {
-      const auto& translation = _pose.translation;
-      return Vector3(translation.vec[0], translation.vec[1], translation.vec[2]);
+    const auto& translation = _pose.translation;
+    return Vector3(translation.vec[0], translation.vec[1], translation.vec[2]);
   } else {
-      return Vector3(0, 0, 0);
+    return Vector3(0, 0, 0);
   }
 }
 
@@ -431,9 +465,31 @@ Dictionary ExpressionTrack::bounding_box_to_dict(const NvAR_Rect& box) const {
 }
 
 Array ExpressionTrack::get_bounding_boxes() const {
-    Array boxes;
-    for (size_t i = 0; i < _outputBboxes.num_boxes; ++i) {
-        boxes.push_back(bounding_box_to_dict(_outputBboxes.boxes[i]));
+  Array boxes;
+  for (size_t i = 0; i < _outputBboxes.num_boxes; ++i) {
+    boxes.push_back(bounding_box_to_dict(_outputBboxes.boxes[i]));
+  }
+  return boxes;
+}
+
+void ExpressionTrack::start_processing_thread() {
+    continue_processing = true;
+    processing_thread = std::thread(&ExpressionTrack::processing_loop, this);
+}
+
+
+void ExpressionTrack::processing_loop() {
+  while (continue_processing) {
+    if (_vidIn.read(_processingFrame)) {
+      {
+        std::lock_guard<std::mutex> lock(processing_mutex);
+        // Swap or copy frame data to _ocvSrcImg
+        _ocvSrcImg = _processingFrame.clone();  // or swap if appropriate
+      }
+      // Do other processing work on _processingFrame
+        
+    } else {
+      UtilityFunctions::print("failed to reads frame");
     }
-    return boxes;
+  }
 }
