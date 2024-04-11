@@ -297,8 +297,8 @@ void ExpressionTrack::_process(double delta) {
         std::lock_guard<std::mutex> lock(processing_mutex);
 
         cv::imshow("Src Image", _ocvSrcImg);
-        cv::Mat matImage(_srcImg.height, _srcImg.width, CV_8UC3, _srcImg.pixels, _srcImg.pitch);
-        cv::imshow("NvCV Image", matImage);
+        /* cv::Mat matImage(_srcImg.height, _srcImg.width, CV_8UC3, _srcImg.pixels, _srcImg.pitch);
+        cv::imshow("NvCV Image", matImage); */
 
         // assumes _ocvSrcImg has already been updated by processing_loop
         // transfer image to GPU
@@ -477,19 +477,19 @@ void ExpressionTrack::start_processing_thread() {
     processing_thread = std::thread(&ExpressionTrack::processing_loop, this);
 }
 
-
 void ExpressionTrack::processing_loop() {
   while (continue_processing) {
     if (_vidIn.read(_processingFrame)) {
       {
         std::lock_guard<std::mutex> lock(processing_mutex);
-        // Swap or copy frame data to _ocvSrcImg
-        _ocvSrcImg = _processingFrame.clone();  // or swap if appropriate
+       
+        // copy async frame data to _ocvSrcImg
+        _processingFrame.copyTo(_ocvSrcImg); 
       }
-      // Do other processing work on _processingFrame
         
     } else {
       UtilityFunctions::print("failed to reads frame");
     }
   }
 }
+
