@@ -11,8 +11,6 @@ script = ExtResource("1_wasnf")
 capture_timer = NodePath("../Timer")
 
 [node name="Timer" type="Timer" parent="."]
-wait_time = 5.0
-autostart = true
 
 [node name="Button" type="Button" parent="."]
 layout_mode = 1

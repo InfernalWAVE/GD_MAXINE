@@ -74,6 +74,7 @@ private:
 
     cv::Mat _ocvSrcImg, _processingFrame;
     float _cameraIntrinsicParams[NUM_CAMERA_INTRINSIC_PARAMS];
+    float _globalExpressionParam;
 
     std::thread processing_thread;
     std::atomic<bool> continue_processing{false};
@@ -95,6 +96,7 @@ public:
     void printBoundingBoxes();
     void printLandmarkConfidence();
     void printPoseTranslation();
+    void printCapture();
 
     Array get_landmarks() const;
     int get_landmark_count() const;
@@ -107,8 +109,20 @@ public:
     Dictionary bounding_box_to_dict(const NvAR_Rect& box) const;
     Array get_bounding_boxes() const;
 
+    void set_landmarks(const Array& p_value) {};
+    void set_landmark_count(int p_value) {};
+    void set_expression_count(int p_value) {};
+    void set_expressions(const Array& p_value) {};
+    void set_landmark_confidence(const Array& p_value) {};
+    void set_pose_rotation(const Quaternion& p_value) {};
+    void set_pose_translation(const Vector3& p_value) {};
+    void set_pose_transform(const Transform3D& p_value) {};
+    void set_bounding_boxes(const Array& p_value) {};
+
     void processing_loop();
     void start_processing_thread();
+
+    void normalizeExpressionsWeights();
 };
 
 }

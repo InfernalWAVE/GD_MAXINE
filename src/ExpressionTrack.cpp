@@ -34,27 +34,8 @@ using namespace godot;
   #define CV_INTER_LINEAR           cv::INTER_LINEAR
 #endif // CV_MAJOR_VERSION
 
-#ifndef M_PI
-  #define M_PI                      3.1415926535897932385
-#endif /* M_PI */
-#ifndef M_2PI
-  #define M_2PI                     6.2831853071795864769
-#endif /* M_2PI */
-#ifndef M_PI_2
-  #define M_PI_2                    1.5707963267948966192
-#endif /* M_PI_2 */
-#define D_RADIANS_PER_DEGREE        (M_PI / 180.)
-#define F_PI                        ((float)M_PI)
-#define F_PI_2                      ((float)M_PI_2)
-#define F_2PI                       ((float)M_2PI)
-#define F_RADIANS_PER_DEGREE        (float)(M_PI / 180.)
-#define CTL(x)                      ((x) & 0x1F)
-#define HELP_REQUESTED              411
-
-#define BAIL(err, code)             do {                            err = code; goto bail;   } while(0)
-
-#define DEFAULT_CODEC         "avc1"
-#define DEFAULT_FACE_MODEL    "face_model2.nvf"
+#define BIND_METHOD(f_name) \
+    ClassDB::bind_method(D_METHOD(#f_name), &ExpressionTrack::f_name)
 
 
 void ExpressionTrack::_bind_methods() {
@@ -67,17 +48,58 @@ void ExpressionTrack::_bind_methods() {
   ClassDB::bind_method(D_METHOD("get_pose_translation"), &ExpressionTrack::get_pose_translation);
   ClassDB::bind_method(D_METHOD("get_pose_transform"), &ExpressionTrack::get_pose_transform);
   ClassDB::bind_method(D_METHOD("get_bounding_boxes"), &ExpressionTrack::get_bounding_boxes);
+
+  ClassDB::bind_method(D_METHOD("set_landmarks", "p_value"), &ExpressionTrack::set_landmarks);
+  ClassDB::bind_method(D_METHOD("set_landmark_count", "p_value"), &ExpressionTrack::set_landmark_count);
+  ClassDB::bind_method(D_METHOD("set_expression_count", "p_value"), &ExpressionTrack::set_expression_count);
+  ClassDB::bind_method(D_METHOD("set_expressions", "p_value"), &ExpressionTrack::set_expressions);
+  ClassDB::bind_method(D_METHOD("set_landmark_confidence", "p_value"), &ExpressionTrack::set_landmark_confidence);
+  ClassDB::bind_method(D_METHOD("set_pose_rotation", "p_value"), &ExpressionTrack::set_pose_rotation);
+  ClassDB::bind_method(D_METHOD("set_pose_translation", "p_value"), &ExpressionTrack::set_pose_translation);
+  ClassDB::bind_method(D_METHOD("set_pose_transform", "p_value"), &ExpressionTrack::set_pose_transform);
+  ClassDB::bind_method(D_METHOD("set_bounding_boxes", "p_value"), &ExpressionTrack::set_bounding_boxes);
+
+
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::ARRAY, "landmarks"), "set_landmarks", "get_landmarks");
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::INT, "landmark_count"), "set_landmark_count", "get_landmark_count");
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::INT, "expression_count"), "set_expression_count", "get_expression_count");
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::ARRAY, "expressions"), "set_expressions", "get_expressions");
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::ARRAY, "landmark_confidence"), "set_landmark_confidence", "get_landmark_confidence");
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::QUATERNION, "pose_rotation"), "set_pose_rotation", "get_pose_rotation");
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::VECTOR3, "pose_translation"), "set_pose_translation", "get_pose_translation");
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::TRANSFORM3D, "pose_transform"), "set_pose_transform", "get_pose_transform");
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::ARRAY, "bounding_boxes"), "set_bounding_boxes", "get_bounding_boxes");
 }
 
-ExpressionTrack::ExpressionTrack() {
-  if(Engine::get_singleton()->is_editor_hint()){
-    set_process_mode(Node::ProcessMode::PROCESS_MODE_DISABLED);
-  }
+ExpressionTrack::ExpressionTrack() { 
+  // initialize members
+  _landmarks.clear();
+  _expressions.clear();
+  _landmarkConfidence.clear();
+  _outputBboxData.clear();
 
+  _landmarkCount = 0;
+  _exprCount = 0;
+  _globalExpressionParam = 1.0f;
+  
+  _pose.rotation = NvAR_Quaternion{0.0f, 0.0f, 0.0f, 1.0f};
+  _pose.translation = NvAR_Vector3f{0.0f, 0.0f, 0.0f};
+
+  _outputBboxData.resize(25, {0.0, 0.0, 0.0, 0.0});
+  _outputBboxes.boxes = _outputBboxData.data();
+  _outputBboxes.max_boxes = static_cast<uint8_t>(_outputBboxData.size());
+  _outputBboxes.num_boxes = 0;
+  
   nvErr = NvAR_CudaStreamCreate(&_stream);
   if (nvErr!=NVCV_SUCCESS) {
     UtilityFunctions::print("failed to create CUDA stream");
   }
+
+  // only process in game
+  if(Engine::get_singleton()->is_editor_hint()){
+    set_process_mode(Node::ProcessMode::PROCESS_MODE_DISABLED);
+  }
+
 }
 
 ExpressionTrack::~ExpressionTrack() {
@@ -260,36 +282,34 @@ void ExpressionTrack::_ready() {
         } else {
           UtilityFunctions::print("successfully ran facial expression feature");
 
+          normalizeExpressionsWeights();
+
           // start capture on separate thread
           start_processing_thread();
-
-
-          // validate expression capture
-          /* printPoseRotation();
-
-          if (_poseMode == 1) {
-            printPoseTranslation();
-          }
-          
-          printExpressionCoefficients();
-          printLandmarkLocations();
-          printLandmarkConfidence();
-          printBoundingBoxes(); */
         }
-
-
       } else {
         UtilityFunctions::print("failed to capture video frame");
       }
-
-
     } else {
       UtilityFunctions::print("failed to open video capture");
     }
-
-
   }
 }
+
+void ExpressionTrack::printCapture() {
+  // validate expression capture
+  printPoseRotation();
+
+  if (_poseMode == 1) {
+    printPoseTranslation();
+  }
+  
+  printExpressionCoefficients();
+  printLandmarkLocations();
+  printLandmarkConfidence();
+  printBoundingBoxes();
+}
+
 
 void ExpressionTrack::_process(double delta) {
     {
@@ -297,8 +317,6 @@ void ExpressionTrack::_process(double delta) {
         std::lock_guard<std::mutex> lock(processing_mutex);
 
         cv::imshow("Src Image", _ocvSrcImg);
-        /* cv::Mat matImage(_srcImg.height, _srcImg.width, CV_8UC3, _srcImg.pixels, _srcImg.pitch);
-        cv::imshow("NvCV Image", matImage); */
 
         // assumes _ocvSrcImg has already been updated by processing_loop
         // transfer image to GPU
@@ -314,6 +332,8 @@ void ExpressionTrack::_process(double delta) {
             UtilityFunctions::print("failed to run facial expression feature");
             return;
         }
+
+        normalizeExpressionsWeights();
     }
 
     // additional process logic
@@ -482,14 +502,26 @@ void ExpressionTrack::processing_loop() {
     if (_vidIn.read(_processingFrame)) {
       {
         std::lock_guard<std::mutex> lock(processing_mutex);
-       
         // copy async frame data to _ocvSrcImg
         _processingFrame.copyTo(_ocvSrcImg); 
       }
-        
     } else {
-      UtilityFunctions::print("failed to reads frame");
+      UtilityFunctions::print("failed to read frame");
     }
   }
 }
 
+void ExpressionTrack::normalizeExpressionsWeights() {
+  assert(_expressions.size() == _exprCount);
+  assert(_expressionScale.size() == _exprCount);
+  assert(_expressionZeroPoint.size() == _exprCount);
+
+  for (size_t i = 0; i < _exprCount; i++) {
+    float tempExpr = _expressions[i];
+    // Normalize expression based on zero point and scale
+    _expressions[i] = 1.0f - std::pow(1.0f - (std::max(_expressions[i] - _expressionZeroPoint[i], 0.0f) * _expressionScale[i]),
+                                      _expressionExponent[i]);
+    // Blend with the previous value using a global parameter
+    _expressions[i] = _globalExpressionParam * _expressions[i] + (1.0f - _globalExpressionParam) * tempExpr;
+  }
+}

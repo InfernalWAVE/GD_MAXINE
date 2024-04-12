@@ -26,6 +26,9 @@ func print_capture_info():
 	print("\nbounding boxes: ")
 	print(get_bounding_boxes())
 
-
 func _on_button_pressed():
 	print_capture_info()
+
+
+func _on_timer_timeout():
+	pass
