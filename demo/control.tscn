@@ -1,10 +1,30 @@
-[gd_scene load_steps=2 format=3 uid="uid://c6bmlyk5rs0eu"]
+[gd_scene load_steps=7 format=3 uid="uid://c6bmlyk5rs0eu"]
 
 [ext_resource type="Script" path="res://test_expression_track.gd" id="1_wasnf"]
+[ext_resource type="Script" path="res://maxine_tracker_controller.gd" id="2_xby6t"]
+[ext_resource type="PackedScene" uid="uid://fpw3erh36uly" path="res://expression_head.tscn" id="3_41yur"]
 
-[node name="Control" type="Control"]
-layout_mode = 3
-anchors_preset = 0
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_x726n"]
+sky_horizon_color = Color(0.64625, 0.65575, 0.67075, 1)
+ground_horizon_color = Color(0.64625, 0.65575, 0.67075, 1)
+
+[sub_resource type="Sky" id="Sky_m8bnb"]
+sky_material = SubResource("ProceduralSkyMaterial_x726n")
+
+[sub_resource type="Environment" id="Environment_pjymp"]
+background_mode = 2
+sky = SubResource("Sky_m8bnb")
+tonemap_mode = 2
+glow_enabled = true
+
+[node name="World" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_pjymp")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.866023, -0.433016, 0.250001, 0, 0.499998, 0.866027, -0.500003, 0.749999, -0.43301, 0, 0, 0)
+shadow_enabled = true
 
 [node name="ExpressionTrack" type="ExpressionTrack" parent="." node_paths=PackedStringArray("capture_timer")]
 script = ExtResource("1_wasnf")
@@ -13,10 +33,22 @@ capture_timer = NodePath("../Timer")
 [node name="Timer" type="Timer" parent="."]
 
 [node name="Button" type="Button" parent="."]
-layout_mode = 1
 offset_right = 358.0
 offset_bottom = 165.0
 text = "Print Facial Capture Info"
+
+[node name="XRFaceModifier3D" type="XRFaceModifier3D" parent="." node_paths=PackedStringArray("expression_tracker")]
+target = NodePath("ExpressionHead")
+script = ExtResource("2_xby6t")
+expression_tracker = NodePath("../ExpressionTrack")
+expression_tracker_name = "/nvidia/face"
+
+[node name="ExpressionHead" parent="XRFaceModifier3D" instance=ExtResource("3_41yur")]
+transform = Transform3D(-4.31809, 0, 3.77499e-07, 0, 4.31809, 0, -3.77499e-07, 0, -4.31809, 0, 0.6, 0)
+
+[node name="Camera3D" type="Camera3D" parent="XRFaceModifier3D"]
+transform = Transform3D(-1, -1.5518e-15, -8.74228e-08, -1.49839e-08, 0.985202, 0.171396, 8.61291e-08, 0.171396, -0.985202, 0, 0.749139, -1.56965)
+fov = 60.9283
 
 [connection signal="timeout" from="Timer" to="ExpressionTrack" method="_on_timer_timeout"]
 [connection signal="pressed" from="Button" to="ExpressionTrack" method="_on_button_pressed"]
