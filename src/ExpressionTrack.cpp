@@ -177,14 +177,6 @@ void ExpressionTrack::_ready() {
 
       CVWrapperForNvCVImage(&_srcImg, &_ocvSrcImg);
 
-      _cameraIntrinsicParams[0] = static_cast<float>(_srcGpu.height);
-      _cameraIntrinsicParams[1] = static_cast<float>(_srcGpu.width) / 2.0f;
-      _cameraIntrinsicParams[2] = static_cast<float>(_srcGpu.height) / 2.0f;
-      nvErr = NvAR_SetF32Array(_featureHan, NvAR_Parameter_Input(CameraIntristicParams), _cameraIntrinsicParams, NUM_CAMERA_INTRINSIC_PARAMS);
-      if (nvErr!=NVCV_SUCCESS) {
-        UtilityFunctions::print("failed to set camera intrinsic params for facial expression feature handle");
-      }
-
       _landmarkCount = NUM_LANDMARKS;
       nvErr = NvAR_Create(NvAR_Feature_FaceExpressions, &_featureHan);
       if (nvErr!=NVCV_SUCCESS) {
@@ -254,6 +246,18 @@ void ExpressionTrack::_ready() {
       nvErr = NvAR_SetObject(_featureHan, NvAR_Parameter_Input(Image), &_srcGpu, sizeof(NvCVImage));
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set image output for facial expression feature handle");
+      }
+
+      _cameraIntrinsicParams[0] = static_cast<float>(_srcGpu.height);
+      _cameraIntrinsicParams[1] = static_cast<float>(_srcGpu.width) / 2.0f;
+      _cameraIntrinsicParams[2] = static_cast<float>(_srcGpu.height) / 2.0f;
+      UtilityFunctions::print("cam focal: ", UtilityFunctions::str(static_cast<float>(_srcGpu.height)));
+      UtilityFunctions::print("cam width: ", UtilityFunctions::str(static_cast<float>(_srcGpu.width) / 2.0f));
+      UtilityFunctions::print("cam height: ", UtilityFunctions::str(static_cast<float>(_srcGpu.height) / 2.0f));
+
+      nvErr = NvAR_SetF32Array(_featureHan, NvAR_Parameter_Input(CameraIntrinsicParams), _cameraIntrinsicParams, NUM_CAMERA_INTRINSIC_PARAMS);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set camera intrinsic params for facial expression feature handle");
       }
 
       nvErr = NvAR_SetObject(_featureHan, NvAR_Parameter_Output(Pose), &_pose.rotation, sizeof(NvAR_Quaternion));
