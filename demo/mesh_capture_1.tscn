@@ -1,9 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://cf6q6u2rm87h4"]
-
-[ext_resource type="ArrayMesh" path="res://captures/mesh_capture_1.tres" id="1_ailn4"]
-
-[node name="MeshCapture1" type="MeshInstance3D"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0905856, 0, -0.146688)
-extra_cull_margin = 500.0
-mesh = ExtResource("1_ailn4")
-skeleton = NodePath("../FaceTrack/Timer")

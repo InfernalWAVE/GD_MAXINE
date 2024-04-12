@@ -1,7 +1,5 @@
 extends ExpressionTrack
 
-@export var capture_timer: Timer
-
 func print_capture_info():
 	print("\nlandmark count: ")
 	print(get_landmark_count())
@@ -28,7 +26,3 @@ func print_capture_info():
 
 func _on_button_pressed():
 	print_capture_info()
-
-
-func _on_timer_timeout():
-	pass

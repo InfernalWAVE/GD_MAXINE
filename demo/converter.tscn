@@ -1,8 +1,0 @@
-[gd_scene load_steps=3 format=3 uid="uid://cjcycvf1phsdh"]
-
-[ext_resource type="Script" path="res://image_texture_to_image.gd" id="1_pjpu5"]
-[ext_resource type="Texture2D" uid="uid://b57wsxwte0pm4" path="res://captures/capture_1.tres" id="2_mv03n"]
-
-[node name="Node2D" type="Node2D"]
-script = ExtResource("1_pjpu5")
-image_texture = ExtResource("2_mv03n")

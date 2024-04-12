@@ -24,3 +24,7 @@ func _process(delta: float) -> void:
 	# update XRFaceTracker blendshapes with expression coefficients
 	for i in range(EXPRESSION_MAP.size()):
 		xr_face_tracker.set_blend_shape(EXPRESSION_MAP[i], expression_coefficients[i])
+	
+	# set head mesh (target) transform
+	get_node(target).set_quaternion(expression_tracker.get_pose_rotation())
+	

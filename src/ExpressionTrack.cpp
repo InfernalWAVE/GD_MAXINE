@@ -131,8 +131,6 @@ ExpressionTrack::~ExpressionTrack() {
 
 void ExpressionTrack::_ready() {
   if(!Engine::get_singleton()->is_editor_hint()) {
-    UtilityFunctions::print("hello from ready :D");
-
     // get model directory
     const char* _model_path = getenv("NVAR_MODEL_DIR");
     if (_model_path) {
@@ -157,9 +155,9 @@ void ExpressionTrack::_ready() {
       static const int fps_precision = FPS_PRECISION; // round frame rate for opencv compatibility
       frame_rate = static_cast<int>((frame_rate + 0.5) * fps_precision) / static_cast<double>(fps_precision);
 
-      UtilityFunctions::print("Video Width: ", UtilityFunctions::str(width));
-      UtilityFunctions::print("Video Height: ", UtilityFunctions::str(height));
-      UtilityFunctions::print("Video FPS: ", UtilityFunctions::str(frame_rate));
+      UtilityFunctions::print("video width: ", UtilityFunctions::str(width));
+      UtilityFunctions::print("video height: ", UtilityFunctions::str(height));
+      UtilityFunctions::print("video FPS: ", UtilityFunctions::str(frame_rate));
 
       _filtering = 0x037; // bitfield, default, all on except 0x100 enhaced closures
       _poseMode = 1; // 0 - 3DOF implicit for only rotation, 1 - 6DOF explicit for head position
@@ -251,9 +249,6 @@ void ExpressionTrack::_ready() {
       _cameraIntrinsicParams[0] = static_cast<float>(_srcGpu.height);
       _cameraIntrinsicParams[1] = static_cast<float>(_srcGpu.width) / 2.0f;
       _cameraIntrinsicParams[2] = static_cast<float>(_srcGpu.height) / 2.0f;
-      UtilityFunctions::print("cam focal: ", UtilityFunctions::str(static_cast<float>(_srcGpu.height)));
-      UtilityFunctions::print("cam width: ", UtilityFunctions::str(static_cast<float>(_srcGpu.width) / 2.0f));
-      UtilityFunctions::print("cam height: ", UtilityFunctions::str(static_cast<float>(_srcGpu.height) / 2.0f));
 
       nvErr = NvAR_SetF32Array(_featureHan, NvAR_Parameter_Input(CameraIntrinsicParams), _cameraIntrinsicParams, NUM_CAMERA_INTRINSIC_PARAMS);
       if (nvErr!=NVCV_SUCCESS) {
@@ -271,9 +266,7 @@ void ExpressionTrack::_ready() {
       }
 
       // capture image
-      if (_vidIn.read(_ocvSrcImg)) {
-        UtilityFunctions::print("succesfully captured video frame");
-        
+      if (_vidIn.read(_ocvSrcImg)) {        
         // process image
         nvErr = NvCVImage_Transfer(&_srcImg, &_srcGpu, 1.f, _stream, nullptr);
         if (nvErr!=NVCV_SUCCESS) {
@@ -284,12 +277,12 @@ void ExpressionTrack::_ready() {
         if (nvErr!=NVCV_SUCCESS) {
           UtilityFunctions::print("failed to run facial expression feature");
         } else {
-          UtilityFunctions::print("successfully ran facial expression feature");
-
           normalizeExpressionsWeights();
 
           // start capture on separate thread
           start_processing_thread();
+
+          UtilityFunctions::print("successfully initialized facial expression feature");
         }
       } else {
         UtilityFunctions::print("failed to capture video frame");
