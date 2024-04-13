@@ -12,6 +12,7 @@ implementation of NVIDIA AR SDK facial expression tracking for Godot 4.3.
 # BUILD INSTRUCTIONS:
 - download and install NVIDIA Broadcast: https://www.nvidia.com/en-us/geforce/broadcasting/broadcast-app/
 - download and install NVIDIA AR SDK: https://www.nvidia.com/en-us/geforce/broadcasting/broadcast-sdk/resources/
+  - NOTE: the extension relies on the environment variable set when installing the AR SDK
 - clone repo
 - open in VS Code
 - build with scons
@@ -19,6 +20,7 @@ implementation of NVIDIA AR SDK facial expression tracking for Godot 4.3.
 # RELEASE INSTALL INSTRUCTIONS:
 - download and install NVIDIA Broadcast: https://www.nvidia.com/en-us/geforce/broadcasting/broadcast-app/
 - download and install NVIDIA AR SDK: https://www.nvidia.com/en-us/geforce/broadcasting/broadcast-sdk/resources/
+  - NOTE: the extension relies on the environment variable set when installing the AR SDK
 - download release
 - place both .dll files and the .gdextension file in the bin folder of your project
 - reload project
