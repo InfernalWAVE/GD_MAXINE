@@ -10,11 +10,13 @@ implementation of NVIDIA AR SDK facial expression tracking for Godot 4.3.
 - the opencv and glm libraries i just took from the samples on the nvidia repo. these versions may be outdated at this point, idk. but i knew they would be compatible with the sdk.
 
 # BUILD INSTRUCTIONS:
+- download and install NVIDIA Broadcast: https://www.nvidia.com/en-us/geforce/broadcasting/broadcast-app/
+- download and install NVIDIA AR SDK: https://www.nvidia.com/en-us/geforce/broadcasting/broadcast-sdk/resources/
 - clone repo
 - open in VS Code
 - build with scons
 
-# INSTALL INSTRUCTIONS:
+# RELEASE INSTALL INSTRUCTIONS:
 - download and install NVIDIA Broadcast: https://www.nvidia.com/en-us/geforce/broadcasting/broadcast-app/
 - download and install NVIDIA AR SDK: https://www.nvidia.com/en-us/geforce/broadcasting/broadcast-sdk/resources/
 - download release
