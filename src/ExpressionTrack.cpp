@@ -10,9 +10,6 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
-#include <godot_cpp/classes/image.hpp>
-#include <godot_cpp/classes/image_texture.hpp>
-#include <godot_cpp/classes/array_mesh.hpp>
 
 using namespace godot;
 
@@ -23,8 +20,6 @@ using namespace godot;
 #include <cstring>
 #include <string>
 #include <vector>
-
-#include "ExpressionTrack.h"
 
 #include "nvAR.h"
 #include "nvAR_defs.h"
@@ -83,23 +78,30 @@ ExpressionTrack::ExpressionTrack() {
   _landmarks.clear();
   _expressions.clear();
   _landmarkConfidence.clear();
-  _outputBboxData.clear();
+  _expressionOutputBboxData.clear();
+  _referencePose.clear();
 
   _landmarkCount = 0;
   _exprCount = 0;
+  _numKeyPoints = 0;
   _globalExpressionParam = 1.0f;
   
   _pose.rotation = NvAR_Quaternion{0.0f, 0.0f, 0.0f, 1.0f};
   _pose.translation = NvAR_Vector3f{0.0f, 0.0f, 0.0f};
 
-  _outputBboxData.resize(25, {0.0, 0.0, 0.0, 0.0});
-  _outputBboxes.boxes = _outputBboxData.data();
-  _outputBboxes.max_boxes = static_cast<uint8_t>(_outputBboxData.size());
-  _outputBboxes.num_boxes = 0;
+  _expressionOutputBboxData.resize(25, {0.0, 0.0, 0.0, 0.0});
+  _expressionOutputBboxes.boxes = _expressionOutputBboxData.data();
+  _expressionOutputBboxes.max_boxes = static_cast<uint8_t>(_expressionOutputBboxData.size());
+  _expressionOutputBboxes.num_boxes = 0;
   
-  nvErr = NvAR_CudaStreamCreate(&_stream);
+  nvErr = NvAR_CudaStreamCreate(&_expressionStream);
   if (nvErr!=NVCV_SUCCESS) {
-    UtilityFunctions::print("failed to create CUDA stream");
+    UtilityFunctions::print("failed to create expression CUDA stream");
+  }
+
+  nvErr = NvAR_CudaStreamCreate(&_bodyStream);
+  if (nvErr!=NVCV_SUCCESS) {
+    UtilityFunctions::print("failed to create body CUDA stream");
   }
 
   // only process in game
@@ -110,10 +112,17 @@ ExpressionTrack::ExpressionTrack() {
 }
 
 ExpressionTrack::~ExpressionTrack() {
-  if (_stream) {
-    nvErr = NvAR_CudaStreamDestroy(_stream);
+  if (_expressionStream) {
+    nvErr = NvAR_CudaStreamDestroy(_expressionStream);
     if (nvErr!=NVCV_SUCCESS) {
-      UtilityFunctions::print("failed to destroy CUDA stream");
+      UtilityFunctions::print("failed to destroy expression CUDA stream");
+    }
+  }
+
+  if (_bodyStream) {
+    nvErr = NvAR_CudaStreamDestroy(_bodyStream);
+    if (nvErr!=NVCV_SUCCESS) {
+      UtilityFunctions::print("failed to destroy body CUDA stream");
     }
   }
   
@@ -126,8 +135,12 @@ ExpressionTrack::~ExpressionTrack() {
   NvCVImage_Dealloc(&_srcImg);
 
   // Destroy feature handle
-  if (_featureHan) {
-    NvAR_Destroy(_featureHan);
+  if (_expressionFeature) {
+    NvAR_Destroy(_expressionFeature);
+  }
+
+  if (_bodyFeature) {
+    NvAR_Destroy(_bodyFeature);
   }
 
   continue_processing = false;
@@ -166,10 +179,16 @@ void ExpressionTrack::_ready() {
       UtilityFunctions::print("video height: ", UtilityFunctions::str(height));
       UtilityFunctions::print("video FPS: ", UtilityFunctions::str(frame_rate));
 
-      _filtering = 0x037; // bitfield, default, all on except 0x100 enhaced closures
+      _expressionFiltering = 0x037; // bitfield, default, all on except 0x100 enhaced closures
       _poseMode = 1; // 0 - 3DOF implicit for only rotation, 1 - 6DOF explicit for head position
       _enableCheekPuff = 0; // experimental, 0 - off, 1 - on
+      
+      _bodyTrackMode = 1; // 0 - High Quality, 1 - High Performance
+      _bodyFiltering = 1; // 0 - disabled, 1 - enabled
+      _useCudaGraph = true;
 
+
+      // allocate src images
       nvErr = NvCVImage_Alloc(&_srcGpu, width, height, NVCV_BGR, NVCV_U8, NVCV_CHUNKY, NVCV_GPU, 1);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to allocate srcGpu NvImage memory");
@@ -181,60 +200,100 @@ void ExpressionTrack::_ready() {
       }
 
       CVWrapperForNvCVImage(&_srcImg, &_ocvSrcImg);
-
       _landmarkCount = NUM_LANDMARKS;
-      nvErr = NvAR_Create(NvAR_Feature_FaceExpressions, &_featureHan);
+
+
+      // create features
+      nvErr = NvAR_Create(NvAR_Feature_FaceExpressions, &_expressionFeature);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to create facial expression feature handle");
       }
 
-      nvErr = NvAR_SetCudaStream(_featureHan, NvAR_Parameter_Config(CUDAStream), _stream);
+      nvErr = NvAR_Create(NvAR_Feature_BodyPoseEstimation, &_bodyFeature);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to create body track feature handle");
+      }
+
+
+      // set feature cuda streams
+      nvErr = NvAR_SetCudaStream(_expressionFeature, NvAR_Parameter_Config(CUDAStream), _expressionStream);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set CUDA stream for facial expression feature handle");
       }
 
-      nvErr = NvAR_SetU32(_featureHan, NvAR_Parameter_Config(Temporal), _filtering);
+      nvErr = NvAR_SetCudaStream(_bodyFeature, NvAR_Parameter_Config(CUDAStream), _bodyStream);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set CUDA stream for body track feature handle");
+      }
+
+
+      // set temporal filtering
+      nvErr = NvAR_SetU32(_expressionFeature, NvAR_Parameter_Config(Temporal), _expressionFiltering);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set temporal filtering for facial expression feature handle");
       }
 
-      nvErr = NvAR_SetU32(_featureHan, NvAR_Parameter_Config(PoseMode), _poseMode);
+      nvErr = NvAR_SetU32(_bodyFeature, NvAR_Parameter_Config(Temporal), _bodyFiltering);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set temporal filtering for body track feature handle");
+      }
+
+      // set facial expression config
+      nvErr = NvAR_SetU32(_expressionFeature, NvAR_Parameter_Config(PoseMode), _poseMode);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set pose mode for facial expression feature handle");
       }
 
-      nvErr = NvAR_SetU32(_featureHan, NvAR_Parameter_Config(EnableCheekPuff), _enableCheekPuff);
+      nvErr = NvAR_SetU32(_expressionFeature, NvAR_Parameter_Config(EnableCheekPuff), _enableCheekPuff);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set enable cheek puff for facial expression feature handle");
       }
 
-      nvErr = NvAR_Load(_featureHan);
+      // set body track config
+      nvErr = NvAR_SetU32(_bodyFeature, NvAR_Parameter_Config(Mode), _bodyTrackMode);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set tracking mode for body tracking feature handle");
+      }
+
+      nvErr = NvAR_SetF32(_bodyFeature, NvAR_Parameter_Config(UseCudaGraph), _useCudaGraph);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set use CUDA grpah for body tracking feature handle");
+      }
+
+      // load features
+      nvErr = NvAR_Load(_expressionFeature);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to load facial expression feature handle");
       }
 
-      _outputBboxData.assign(25, {0.f, 0.f, 0.f, 0.f});
-      _outputBboxes.boxes = _outputBboxData.data();
-      _outputBboxes.max_boxes = (uint8_t)_outputBboxData.size();
-      _outputBboxes.num_boxes = 0;
-      nvErr = NvAR_SetObject(_featureHan, NvAR_Parameter_Output(BoundingBoxes), &_outputBboxes, sizeof(NvAR_BBoxes));
+      nvErr = NvAR_Load(_bodyFeature);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to load body tracking feature handle");
+      }
+
+      _expressionOutputBboxData.assign(25, {0.f, 0.f, 0.f, 0.f});
+      _expressionOutputBboxes.boxes = _expressionOutputBboxData.data();
+      _expressionOutputBboxes.max_boxes = (uint8_t)_expressionOutputBboxData.size();
+      _expressionOutputBboxes.num_boxes = 0;
+      nvErr = NvAR_SetObject(_expressionFeature, NvAR_Parameter_Output(BoundingBoxes), &_expressionOutputBboxes, sizeof(NvAR_BBoxes));
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set bounding boxes output for facial expression feature handle");
       }
 
       _landmarks.resize(_landmarkCount);
-      nvErr = NvAR_SetObject(_featureHan, NvAR_Parameter_Output(Landmarks), _landmarks.data(), sizeof(NvAR_Point2f));
+      nvErr = NvAR_SetObject(_expressionFeature, NvAR_Parameter_Output(Landmarks), _landmarks.data(), sizeof(NvAR_Point2f));
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set landmarks output for facial expression feature handle");
       }
 
       _landmarkConfidence.resize(_landmarkCount);
-      nvErr = NvAR_SetF32Array(_featureHan, NvAR_Parameter_Output(LandmarksConfidence), _landmarkConfidence.data(), _landmarkCount);
+      nvErr = NvAR_SetF32Array(_expressionFeature, NvAR_Parameter_Output(LandmarksConfidence), _landmarkConfidence.data(), _landmarkCount);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set landmark confidence output for facial expression feature handle");
       }
 
-      nvErr = NvAR_GetU32(_featureHan, NvAR_Parameter_Config(ExpressionCount), &_exprCount);
+      // get feature counts
+      nvErr = NvAR_GetU32(_expressionFeature, NvAR_Parameter_Config(ExpressionCount), &_exprCount);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to get expression count for facial expression feature handle");
       }
@@ -243,44 +302,110 @@ void ExpressionTrack::_ready() {
       _expressionScale.resize(_exprCount, 1.0f);
       _expressionExponent.resize(_exprCount, 1.0f);
 
-      nvErr = NvAR_SetF32Array(_featureHan, NvAR_Parameter_Output(ExpressionCoefficients), _expressions.data(), _exprCount);
+      nvErr = NvAR_GetU32(_bodyFeature, NvAR_Parameter_Config(NumKeyPoints), &_numKeyPoints);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to get keypoint count for boody tracking feature handle");
+      } else {
+        UtilityFunctions::print("keypoints retrieved: ", UtilityFunctions::str(_numKeyPoints));
+      }
+
+      _keypoints.assign(_numKeyPoints, { 0.f, 0.f });
+      _keypoints3D.assign(_numKeyPoints, { 0.f, 0.f, 0.f });
+      _jointAngles.assign(_numKeyPoints, { 0.f, 0.f, 0.f, 1.f });
+      _keypoints_confidence.assign(_numKeyPoints, 0.f);
+      _referencePose.assign(_numKeyPoints, { 0.f, 0.f, 0.f });
+
+      const void* pReferencePose;
+      nvErr = NvAR_GetObject(_bodyFeature, NvAR_Parameter_Config(ReferencePose), &pReferencePose,
+                            sizeof(NvAR_Point3f));
+      memcpy(_referencePose.data(), pReferencePose, sizeof(NvAR_Point3f) * _numKeyPoints);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to get reference pose for boody tracking feature handle");
+      }
+
+
+      nvErr = NvAR_SetF32Array(_expressionFeature, NvAR_Parameter_Output(ExpressionCoefficients), _expressions.data(), _exprCount);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set expression coefficient output for facial expression feature handle");
       }
 
-      nvErr = NvAR_SetObject(_featureHan, NvAR_Parameter_Input(Image), &_srcGpu, sizeof(NvCVImage));
+      // set feature inputs
+      nvErr = NvAR_SetObject(_expressionFeature, NvAR_Parameter_Input(Image), &_srcGpu, sizeof(NvCVImage));
       if (nvErr!=NVCV_SUCCESS) {
-        UtilityFunctions::print("failed to set image output for facial expression feature handle");
+        UtilityFunctions::print("failed to set image input for facial expression feature handle");
+      }
+      
+      nvErr = NvAR_SetObject(_bodyFeature, NvAR_Parameter_Input(Image), &_srcGpu, sizeof(NvCVImage));
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set image input for body tracking feature handle");
       }
 
       _cameraIntrinsicParams[0] = static_cast<float>(_srcGpu.height);
       _cameraIntrinsicParams[1] = static_cast<float>(_srcGpu.width) / 2.0f;
       _cameraIntrinsicParams[2] = static_cast<float>(_srcGpu.height) / 2.0f;
 
-      nvErr = NvAR_SetF32Array(_featureHan, NvAR_Parameter_Input(CameraIntrinsicParams), _cameraIntrinsicParams, NUM_CAMERA_INTRINSIC_PARAMS);
+      nvErr = NvAR_SetF32Array(_expressionFeature, NvAR_Parameter_Input(CameraIntrinsicParams), _cameraIntrinsicParams, NUM_CAMERA_INTRINSIC_PARAMS);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set camera intrinsic params for facial expression feature handle");
       }
 
-      nvErr = NvAR_SetObject(_featureHan, NvAR_Parameter_Output(Pose), &_pose.rotation, sizeof(NvAR_Quaternion));
+      nvErr = NvAR_SetObject(_expressionFeature, NvAR_Parameter_Output(Pose), &_pose.rotation, sizeof(NvAR_Quaternion));
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set pose rotation output for facial expression feature handle");
       }
 
-      nvErr = NvAR_SetObject(_featureHan, NvAR_Parameter_Output(PoseTranslation), &_pose.translation, sizeof(NvAR_Vector3f));
+      nvErr = NvAR_SetObject(_expressionFeature, NvAR_Parameter_Output(PoseTranslation), &_pose.translation, sizeof(NvAR_Vector3f));
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set pose translation output for facial expression feature handle");
+      }
+
+      // finish body track output, TODO reorder this once it is all working
+      nvErr = NvAR_SetObject(_bodyFeature, NvAR_Parameter_Output(KeyPoints), _keypoints.data(), sizeof(NvAR_Point2f));
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set keypoints output for body track feature handle");
+      }
+
+      nvErr = NvAR_SetObject(_bodyFeature, NvAR_Parameter_Output(KeyPoints3D), _keypoints3D.data(), sizeof(NvAR_Point3f));
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set keypoints3D output for body track feature handle");
+      }
+
+      nvErr = NvAR_SetObject(_bodyFeature, NvAR_Parameter_Output(JointAngles), _jointAngles.data(), sizeof(NvAR_Quaternion));
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set joint angles output for body track feature handle");
+      }
+
+      nvErr = NvAR_SetF32Array(_bodyFeature, NvAR_Parameter_Output(KeyPointsConfidence), _keypoints_confidence.data(), sizeof(float));
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set keypoints confidence output for body track feature handle");
+        UtilityFunctions::print("ERROR CODE: ", UtilityFunctions::str(nvErr));
+      }
+
+      _bodyOutputBboxData.assign(25, { 0.f, 0.f, 0.f, 0.f });
+      _bodyOutputBboxConfData.assign(25, 0.f);
+      _bodyOutputBboxes.boxes = _bodyOutputBboxData.data();
+      _bodyOutputBboxes.max_boxes = (uint8_t)_bodyOutputBboxData.size();
+      _bodyOutputBboxes.num_boxes = 0;
+
+      nvErr = NvAR_SetObject(_bodyFeature, NvAR_Parameter_Output(BoundingBoxes), &_bodyOutputBboxes, sizeof(NvAR_BBoxes));
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set bounding box output for body track feature handle");
+      }
+
+      nvErr = NvAR_SetF32Array(_bodyFeature, NvAR_Parameter_Output(BoundingBoxesConfidence), _bodyOutputBboxConfData.data(), _bodyOutputBboxes.max_boxes);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set bounding box confidence output for body track feature handle");
       }
 
       // capture image
       if (_vidIn.read(_ocvSrcImg)) {        
         // process image
-        nvErr = NvCVImage_Transfer(&_srcImg, &_srcGpu, 1.f, _stream, nullptr);
+        nvErr = NvCVImage_Transfer(&_srcImg, &_srcGpu, 1.f, _expressionStream, nullptr);
         if (nvErr!=NVCV_SUCCESS) {
           UtilityFunctions::print("failed to transfer image to gpu");
         }
 
-        nvErr = NvAR_Run(_featureHan);
+        nvErr = NvAR_Run(_expressionFeature);
         if (nvErr!=NVCV_SUCCESS) {
           UtilityFunctions::print("failed to run facial expression feature");
         } else {
@@ -291,6 +416,14 @@ void ExpressionTrack::_ready() {
 
           UtilityFunctions::print("successfully initialized facial expression feature");
         }
+
+        nvErr = NvAR_Run(_bodyFeature);
+        if (nvErr!=NVCV_SUCCESS) {
+          UtilityFunctions::print("failed to run body tracking feature");
+        } else {
+          UtilityFunctions::print("successfully initialized body tracking feature");
+        }
+
       } else {
         UtilityFunctions::print("failed to capture video frame");
       }
@@ -324,14 +457,14 @@ void ExpressionTrack::_process(double delta) {
 
         // assumes _ocvSrcImg has already been updated by processing_loop
         // transfer image to GPU
-        nvErr = NvCVImage_Transfer(&_srcImg, &_srcGpu, 1.f, _stream, nullptr);
+        nvErr = NvCVImage_Transfer(&_srcImg, &_srcGpu, 1.f, _expressionStream, nullptr);
         if (nvErr!=NVCV_SUCCESS) {
             UtilityFunctions::print("failed to transfer image to gpu");
             return;
         }
 
         // run facial expression feature
-        nvErr = NvAR_Run(_featureHan);
+        nvErr = NvAR_Run(_expressionFeature);
         if (nvErr!=NVCV_SUCCESS) {
             UtilityFunctions::print("failed to run facial expression feature");
             return;
@@ -387,13 +520,13 @@ void ExpressionTrack::printBoundingBoxes() {
   UtilityFunctions::print("\nBounding Boxes: (x, y, width, height)");
 
   godot::String bboxesStr = "";
-  for (size_t i = 0; i < _outputBboxes.num_boxes; ++i) {
-    const auto& box = _outputBboxes.boxes[i];
+  for (size_t i = 0; i < _expressionOutputBboxes.num_boxes; ++i) {
+    const auto& box = _expressionOutputBboxes.boxes[i];
     bboxesStr += "("+ UtilityFunctions::str(box.x) + ", " 
                     + UtilityFunctions::str(box.y) + ", " 
                     + UtilityFunctions::str(box.width) + ", " 
                     + UtilityFunctions::str(box.height) + ")";
-    if (i < _outputBboxes.num_boxes - 1) {
+    if (i < _expressionOutputBboxes.num_boxes - 1) {
       bboxesStr += ", ";
     }
   }
@@ -490,8 +623,8 @@ Dictionary ExpressionTrack::bounding_box_to_dict(const NvAR_Rect& box) const {
 
 Array ExpressionTrack::get_bounding_boxes() const {
   Array boxes;
-  for (size_t i = 0; i < _outputBboxes.num_boxes; ++i) {
-    boxes.push_back(bounding_box_to_dict(_outputBboxes.boxes[i]));
+  for (size_t i = 0; i < _expressionOutputBboxes.num_boxes; ++i) {
+    boxes.push_back(bounding_box_to_dict(_expressionOutputBboxes.boxes[i]));
   }
   return boxes;
 }

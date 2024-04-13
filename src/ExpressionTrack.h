@@ -18,9 +18,6 @@
 #include <mutex>
 
 #include <godot_cpp/classes/node.hpp>
-#include <godot_cpp/classes/image.hpp>
-#include <godot_cpp/classes/image_texture.hpp>
-#include <godot_cpp/classes/array_mesh.hpp>
 
 #include "nvAR.h"
 #include "nvAR_defs.h"
@@ -42,16 +39,24 @@ private:
     cv::VideoCapture _vidIn;
 
     NvCVImage _srcImg, _srcGpu;
-    NvAR_FeatureHandle _featureHan{};
+    NvAR_FeatureHandle _expressionFeature{}, _bodyFeature{};
 
-    CUstream _stream;
-    unsigned _poseMode, _enableCheekPuff, _filtering, _exprCount, _landmarkCount;
+    CUstream _expressionStream, _bodyStream;
+    unsigned _poseMode, _enableCheekPuff, _expressionFiltering, _exprCount, _landmarkCount, _bodyTrackMode, _bodyFiltering, _numKeyPoints;
+    bool _useCudaGraph;
 
-    std::vector<NvAR_Rect> _outputBboxData;
-    NvAR_BBoxes _outputBboxes;
+    std::vector<NvAR_Point3f> _referencePose;
+    std::vector<NvAR_Rect> _expressionOutputBboxData, _bodyOutputBboxData;
+    NvAR_BBoxes _expressionOutputBboxes{}, _bodyOutputBboxes{};
 
     std::vector<NvAR_Point2f> _landmarks;
     std::vector<float> _expressions, _expressionZeroPoint, _expressionScale, _expressionExponent, _eigenvalues, _landmarkConfidence;
+
+    std::vector<NvAR_Point2f> _keypoints;
+    std::vector<float> _keypoints_confidence;
+    std::vector<NvAR_Point3f> _keypoints3D;
+    std::vector<NvAR_Quaternion> _jointAngles;
+    std::vector<float> _bodyOutputBboxConfData;
 
     struct Pose {
         NvAR_Quaternion rotation;
