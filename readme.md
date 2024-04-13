@@ -1,4 +1,4 @@
-# GD_MAXINE_test
+# GD_MAXINE
 implementation of NVIDIA AR SDK facial expression tracking for Godot 4.3.
 
 # NOTE
