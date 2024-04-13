@@ -1,9 +1,8 @@
+// author: Ryan Powell, 2024.
 #ifndef EXPRESSIONTRACK_H
 #define EXPRESSIONTRACK_H
 
-#include <chrono>
 #include <cmath>
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -32,21 +31,6 @@ class ExpressionTrack: public Node {
     GDCLASS(ExpressionTrack, Node)
 
 private:
-    class MyTimer {
-        public:
-            MyTimer()     { dt = dt.zero();                                      }  /**< Clear the duration to 0. */
-            void start()  { t0 = std::chrono::high_resolution_clock::now();      }  /**< Start  the timer. */
-            void pause()  { dt = std::chrono::high_resolution_clock::now() - t0; }  /**< Pause  the timer. */
-            void resume() { t0 = std::chrono::high_resolution_clock::now() - dt; }  /**< Resume the timer. */
-            void stop()   { pause();                                             }  /**< Stop   the timer. */
-            double elapsedTimeFloat() const {
-                return std::chrono::duration<double>(dt).count();
-            } /**< Report the elapsed time as a float. */
-        private:
-            std::chrono::high_resolution_clock::time_point t0;
-            std::chrono::high_resolution_clock::duration dt;
-    };
-
     NvCV_Status nvErr;
     std::string modelPath;
     cv::VideoCapture _vidIn;

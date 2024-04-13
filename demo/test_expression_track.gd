@@ -1,3 +1,4 @@
+# author: Ryan Powell, 2024.
 extends ExpressionTrack
 
 func print_capture_info():
