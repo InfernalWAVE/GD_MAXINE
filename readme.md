@@ -37,9 +37,9 @@ the captured expression information is exposed as properties on the ExpressionTr
 the expression coefficients are then mapped to blendshapes in an XRFaceTracker. this XRFaceTracker is used by an XRFaceModifier to set the blendshapes on the mesh
 
 # CREDITS:
-This software is released under the MIT License. See LICENSE files for information on permissions.
+This software is released under the MIT License. See LICENSE file for information on permissions.
 
-This software contains source code provided by NVIDIA Corporation.
+This software contains source code provided by NVIDIA Corporation. See LICENSE.NVIDIA.txt file for information on permissions.
 
 Powered by NVIDIA Broadcast.
 
