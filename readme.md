@@ -1,5 +1,5 @@
 # GD_MAXINE_test
-implementation of NVIDIA AR SDK facial expression tracking for Godot 4.3+
+implementation of NVIDIA AR SDK facial expression tracking for Godot 4.3.
 
 # NOTE
 - idk what i'm doing really but i'm trying my best. if things are sloppy, forgive me.
@@ -24,6 +24,7 @@ implementation of NVIDIA AR SDK facial expression tracking for Godot 4.3+
 - add ExpressionTrack node to a scene.
 - run game
 
+# DEMO INFO:
 when the game runs the extension will create an OpenCV VideoCapture object, and begin capturing frames and running the facial expression feature on them.
 
 the captured expression information is exposed as properties on the ExpressionTrack node. You can use functions like:
@@ -32,4 +33,4 @@ the captured expression information is exposed as properties on the ExpressionTr
 - get_pose_transform()
 - etc
 
-this is a mess right now, but I plan to open source soon. feel free to mess around and enjoy though!
+the expression coefficients are then mapped to blendshapes in an XRFaceTracker. this XRFaceTracker is used by an XRFaceModifier to set the blendshapes on the mesh
