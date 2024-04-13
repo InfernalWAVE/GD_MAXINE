@@ -28,18 +28,36 @@ implementation of NVIDIA AR SDK facial expression tracking for Godot 4.3.
 # USE INSTRUCTIONS:
 - add ExpressionTrack node to a scene.
 - create a script with a reference to the ExpressionTrack node, add logic for using the captured expression info.
-- NOTE: _ready() and _process() are overridden on the ExpressionTrack node. attaching a script that uses these functions will break the tracking. I reccomend not attaching any scripts to the ExpressionTrack node unless you understand what the extension is doinig.
-- NOTE: the extension automatically uses your default system camera for now. adding a camera select option is feasible in the future.
-- run game
+
+The following functions are available:
+- get_expression_count()
+  - returns int, number of expression coefficients
+- get_expressions()
+  - returns Array, normalized expression coefficients as float
+- get_landmark_count()
+  - returns int, number of facial landmarks
+- get_landmarks()
+  - returns Array, facial landmark positions as Vector2
+- get_pose_transform()
+  - returns Transform3D, head pose
+- get_pose_rotation()
+  - returns Quaternion, head pose rotation
+- get_pose_translation(),
+  - returns Vector3, head pose position
+- get_bounding_boxes(),
+  - returns Array, bounding boxes for detected face as Dictionary
+    - Dictionary members are: x, y, width, height, as float
+
+these are also exposed as properties on the node for convenience. there technically are setters, but they do nothing.
+
+NOTE: _ready() and _process() are overridden on the ExpressionTrack node. attaching a script that uses these functions will break the tracking. I reccomend not attaching any scripts to the ExpressionTrack node unless you understand what the extension is doinig.
+
+NOTE: the extension automatically uses your default system camera for now. adding a camera select option is feasible in the future.
 
 # DEMO INFO:
 when the game runs the extension will create an OpenCV VideoCapture object, and begin capturing frames and running the facial expression feature on them.
 
-the captured expression information is exposed as properties on the ExpressionTrack node. You can use functions like:
-- get_expressions()
-- get_landmarks()
-- get_pose_transform()
-- etc
+the captured expression information is exposed as properties on the ExpressionTrack node.
 
 the expression coefficients are then mapped to blendshapes in an XRFaceTracker. this XRFaceTracker is used by an XRFaceModifier to set the blendshapes on the mesh
 
