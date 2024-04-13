@@ -41,4 +41,6 @@ This software is released under the MIT License. See LICENSE files for informati
 
 This software contains source code provided by NVIDIA Corporation.
 
+Powered by NVIDIA Broadcast.
+
 Created By: Ryan Powell, 2024.
