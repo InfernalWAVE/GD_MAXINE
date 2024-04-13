@@ -3,6 +3,7 @@ implementation of NVIDIA AR SDK facial expression tracking for Godot 4.3.
 
 # NOTE
 - idk what i'm doing really but i'm trying my best. if things are sloppy, forgive me.
+- this is all done and setup on windows. the dlls in the demo project bin are for windows.
 - extension is still named "gdexample", the intended named for the extension is "GD_MAXINE"
 - the face mesh in the demo needs blend shapes for: BrowInnerUpRight and BrowInnerUpLeft. it is setup for BrowInnerUp, but that blendshape is missing from the XRFaceTracker at time of release. NVIDIA's SDK reports each blendshape separately though, so it should work with a properly setup mesh.
 - still need to work out position posing for the head mesh in the demo. will need to define an origin and scale for the pose translation.
