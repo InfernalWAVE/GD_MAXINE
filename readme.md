@@ -35,3 +35,5 @@ the captured expression information is exposed as properties on the ExpressionTr
 - etc
 
 the expression coefficients are then mapped to blendshapes in an XRFaceTracker. this XRFaceTracker is used by an XRFaceModifier to set the blendshapes on the mesh
+
+Created By: Ryan Powell, 2024.
