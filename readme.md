@@ -23,6 +23,7 @@ implementation of NVIDIA AR SDK facial expression tracking for Godot 4.3.
 
 # USE INSTRUCTIONS:
 - add ExpressionTrack node to a scene.
+- create a script with a reference to the ExpressionTrack node, add logic for using the captured expression info. NOTE: _ready() and _process() are overridden on the ExpressionTrack node. attaching a script that uses these functions will break the tracking. I reccomend not attaching any scripts to the ExpressionTrack node unless you understand what the extension is doinig.
 - run game
 
 # DEMO INFO:
