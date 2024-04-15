@@ -39,11 +39,11 @@ private:
     cv::VideoCapture _vidIn;
 
     NvCVImage _srcImg, _srcGpu;
-    NvAR_FeatureHandle _expressionFeature{}, _bodyFeature{};
+    NvAR_FeatureHandle _expressionFeature{}, _bodyFeature{}, _gazeFeature{};
 
-    CUstream _expressionStream, _bodyStream;
-    unsigned _poseMode, _enableCheekPuff, _expressionFiltering, _exprCount, _landmarkCount, _bodyTrackMode, _bodyFiltering, _numKeyPoints;
-    bool _useCudaGraph;
+    CUstream _expressionStream, _bodyStream, _gazeStream;
+    unsigned _poseMode, _enableCheekPuff, _expressionFiltering, _exprCount, _landmarkCount, _bodyTrackMode, _bodyFiltering, _numKeyPoints, _gazeSensitivity, _gazeFiltering;
+    bool _bodyUseCudaGraph, _gazeUseCudaGraph, _gazeRedirect;
 
     std::vector<NvAR_Point3f> _referencePose;
     std::vector<NvAR_Rect> _expressionOutputBboxData, _bodyOutputBboxData;
@@ -74,6 +74,12 @@ private:
     std::thread processing_thread;
     std::atomic<bool> continue_processing{false};
     std::mutex processing_mutex;
+
+    float _gaze_angles_vector[2] = {0.f};
+    NvAR_Point3f _gaze_direction[2] = {{0.f, 0.f, 0.f}};
+    unsigned int _gazeNumLandmarks;
+    std::vector<NvAR_Point2f> _gazeFacialLandmarks;
+    
 
 protected:
     static void _bind_methods();
@@ -118,6 +124,29 @@ public:
     void start_processing_thread();
 
     void normalizeExpressionsWeights();
+
+    Array get_keypoints() const;
+    Array get_keypoints3D() const;
+    Array get_joint_angles() const;
+    Array get_keypoints_confidence() const;
+    Array get_body_bounding_boxes() const;
+    Array get_body_bounding_box_confidence() const;
+
+    void set_keypoints(const Array& p_value) {};
+    void set_keypoints3D(const Array& p_value) {};
+    void set_joint_angles(const Array& p_value) {};
+    void set_keypoints_confidence(const Array& p_value) {};
+    void set_body_bounding_boxes(const Array& p_value) {};
+    void set_body_bounding_box_confidence(const Array& p_value) {};
+
+    void drawLandmarks(cv::Mat& image);
+    void drawKeypoints(cv::Mat& image);
+
+    Array get_gaze_angles_vector() const;
+    Vector3 get_gaze_direction() const;
+    void set_gaze_angles_vector(const godot::Array& p_value) {};
+    void set_gaze_direction(const godot::Vector3& p_value) {};
+
 };
 
 }

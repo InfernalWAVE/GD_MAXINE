@@ -41,6 +41,7 @@ using namespace godot;
 
 
 void ExpressionTrack::_bind_methods() {
+  // face tracking
   ClassDB::bind_method(D_METHOD("get_landmarks"), &ExpressionTrack::get_landmarks);
   ClassDB::bind_method(D_METHOD("get_landmark_count"), &ExpressionTrack::get_landmark_count);
   ClassDB::bind_method(D_METHOD("get_expression_count"), &ExpressionTrack::get_expression_count);
@@ -71,6 +72,38 @@ void ExpressionTrack::_bind_methods() {
   ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::VECTOR3, "pose_translation"), "set_pose_translation", "get_pose_translation");
   ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::TRANSFORM3D, "pose_transform"), "set_pose_transform", "get_pose_transform");
   ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::ARRAY, "bounding_boxes"), "set_bounding_boxes", "get_bounding_boxes");
+
+  // body tracking
+  ClassDB::bind_method(D_METHOD("get_keypoints"), &ExpressionTrack::get_keypoints);
+  ClassDB::bind_method(D_METHOD("get_keypoints3D"), &ExpressionTrack::get_keypoints3D);
+  ClassDB::bind_method(D_METHOD("get_joint_angles"), &ExpressionTrack::get_joint_angles);
+  ClassDB::bind_method(D_METHOD("get_keypoints_confidence"), &ExpressionTrack::get_keypoints_confidence);
+  ClassDB::bind_method(D_METHOD("get_body_bounding_boxes"), &ExpressionTrack::get_body_bounding_boxes);
+  ClassDB::bind_method(D_METHOD("get_body_bounding_box_confidence"), &ExpressionTrack::get_body_bounding_box_confidence);
+  
+  ClassDB::bind_method(D_METHOD("set_keypoints", "p_value"), &ExpressionTrack::set_keypoints);
+  ClassDB::bind_method(D_METHOD("set_keypoints3D", "p_value"), &ExpressionTrack::set_keypoints3D);
+  ClassDB::bind_method(D_METHOD("set_joint_angles", "p_value"), &ExpressionTrack::set_joint_angles);
+  ClassDB::bind_method(D_METHOD("set_keypoints_confidence", "p_value"), &ExpressionTrack::set_keypoints_confidence);
+  ClassDB::bind_method(D_METHOD("set_body_bounding_boxes", "p_value"), &ExpressionTrack::set_body_bounding_boxes);
+  ClassDB::bind_method(D_METHOD("set_body_bounding_box_confidence", "p_value"), &ExpressionTrack::set_body_bounding_box_confidence);
+
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::ARRAY, "keypoints"), "set_keypoints", "get_keypoints");
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::ARRAY, "keypoints_3D"), "set_keypoints3D", "get_keypoints3D");
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::ARRAY, "joint_angles"), "set_joint_angles", "get_joint_angles");
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::ARRAY, "keypoints_confidence"), "set_keypoints_confidence", "get_keypoints_confidence");
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::ARRAY, "body_bounding_boxes"), "set_body_bounding_boxes", "get_body_bounding_boxes");
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::ARRAY, "body_bounding_box_confidence"), "set_body_bounding_box_confidence", "get_body_bounding_box_confidence");
+
+  ClassDB::bind_method(D_METHOD("get_gaze_angles_vector"), &ExpressionTrack::get_gaze_angles_vector);
+  ClassDB::bind_method(D_METHOD("get_gaze_direction"), &ExpressionTrack::get_gaze_direction);
+
+  ClassDB::bind_method(D_METHOD("set_gaze_angles_vector", "p_value"), &ExpressionTrack::set_gaze_angles_vector);
+  ClassDB::bind_method(D_METHOD("set_gaze_direction", "p_value"), &ExpressionTrack::set_gaze_direction);
+
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::ARRAY, "gaze_angles_vector"), "set_gaze_angles_vector", "get_gaze_angles_vector");
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::VECTOR3, "gaze_direction"), "set_gaze_direction", "get_gaze_direction");
+
 }
 
 ExpressionTrack::ExpressionTrack() { 
@@ -104,6 +137,11 @@ ExpressionTrack::ExpressionTrack() {
     UtilityFunctions::print("failed to create body CUDA stream");
   }
 
+  nvErr = NvAR_CudaStreamCreate(&_gazeStream);
+  if (nvErr!=NVCV_SUCCESS) {
+    UtilityFunctions::print("failed to create gaze CUDA stream");
+  }
+
   // only process in game
   if(Engine::get_singleton()->is_editor_hint()){
     set_process_mode(Node::ProcessMode::PROCESS_MODE_DISABLED);
@@ -112,6 +150,12 @@ ExpressionTrack::ExpressionTrack() {
 }
 
 ExpressionTrack::~ExpressionTrack() {
+  continue_processing = false;
+  if (processing_thread.joinable()) {
+    processing_thread.join();
+  }
+  
+  
   if (_expressionStream) {
     nvErr = NvAR_CudaStreamDestroy(_expressionStream);
     if (nvErr!=NVCV_SUCCESS) {
@@ -123,6 +167,13 @@ ExpressionTrack::~ExpressionTrack() {
     nvErr = NvAR_CudaStreamDestroy(_bodyStream);
     if (nvErr!=NVCV_SUCCESS) {
       UtilityFunctions::print("failed to destroy body CUDA stream");
+    }
+  }
+
+  if (_gazeStream) {
+    nvErr = NvAR_CudaStreamDestroy(_gazeStream);
+    if (nvErr!=NVCV_SUCCESS) {
+      UtilityFunctions::print("failed to destroy gaze CUDA stream");
     }
   }
   
@@ -137,16 +188,37 @@ ExpressionTrack::~ExpressionTrack() {
   // Destroy feature handle
   if (_expressionFeature) {
     NvAR_Destroy(_expressionFeature);
+    _expressionFeature = nullptr;
   }
 
   if (_bodyFeature) {
     NvAR_Destroy(_bodyFeature);
+    _bodyFeature = nullptr;
   }
 
-  continue_processing = false;
-  if (processing_thread.joinable()) {
-    processing_thread.join();
+  if (_gazeFeature) {
+    NvAR_Destroy(_gazeFeature);
+    _gazeFeature = nullptr;
   }
+
+  _bodyOutputBboxData.clear();
+  _expressionOutputBboxData.clear();
+  _landmarks.clear();
+  _landmarkConfidence.clear();
+  _keypoints.clear();
+  _keypoints3D.clear();
+  _keypoints_confidence.clear();
+  _expressions.clear();
+  _expressionScale.clear();
+  _expressionZeroPoint.clear();
+  _expressionExponent.clear();
+  _eigenvalues.clear();
+  _jointAngles.clear();
+  _referencePose.clear();
+  _bodyOutputBboxConfData.clear();
+  
+  _ocvSrcImg.release();
+  _processingFrame.release();
 }
 
 void ExpressionTrack::_ready() {
@@ -183,10 +255,14 @@ void ExpressionTrack::_ready() {
       _poseMode = 1; // 0 - 3DOF implicit for only rotation, 1 - 6DOF explicit for head position
       _enableCheekPuff = 0; // experimental, 0 - off, 1 - on
       
-      _bodyTrackMode = 1; // 0 - High Quality, 1 - High Performance
+      _bodyTrackMode = 0; // 0 - High Quality, 1 - High Performance
       _bodyFiltering = 1; // 0 - disabled, 1 - enabled
-      _useCudaGraph = true;
+      _bodyUseCudaGraph = true;
 
+      _gazeSensitivity = 3; // Unsigned integer in the range of 2-5 to increase the sensitivity of the algorithm to the redirected eye size. 2 uses a smaller eye region and 5 uses a larger eye size. (<-- from docs)
+      _gazeFiltering = -1; // unsigned int, 1 - enabled, 0 - diabled, (-1 is all filtering? from comments in sample)
+      _gazeRedirect = false; 
+      _gazeUseCudaGraph = false; 
 
       // allocate src images
       nvErr = NvCVImage_Alloc(&_srcGpu, width, height, NVCV_BGR, NVCV_U8, NVCV_CHUNKY, NVCV_GPU, 1);
@@ -214,6 +290,11 @@ void ExpressionTrack::_ready() {
         UtilityFunctions::print("failed to create body track feature handle");
       }
 
+      nvErr = NvAR_Create(NvAR_Feature_GazeRedirection, &_gazeFeature);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to create gaze track feature handle");
+      }
+
 
       // set feature cuda streams
       nvErr = NvAR_SetCudaStream(_expressionFeature, NvAR_Parameter_Config(CUDAStream), _expressionStream);
@@ -224,6 +305,11 @@ void ExpressionTrack::_ready() {
       nvErr = NvAR_SetCudaStream(_bodyFeature, NvAR_Parameter_Config(CUDAStream), _bodyStream);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set CUDA stream for body track feature handle");
+      }
+      
+      nvErr = NvAR_SetCudaStream(_gazeFeature, NvAR_Parameter_Config(CUDAStream), _gazeStream);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set CUDA stream for gaze track feature handle");
       }
 
 
@@ -236,6 +322,11 @@ void ExpressionTrack::_ready() {
       nvErr = NvAR_SetU32(_bodyFeature, NvAR_Parameter_Config(Temporal), _bodyFiltering);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set temporal filtering for body track feature handle");
+      }
+
+      nvErr = NvAR_SetU32(_gazeFeature, NvAR_Parameter_Config(Temporal), _gazeFiltering);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set temporal filtering for gaze track feature handle");
       }
 
       // set facial expression config
@@ -255,9 +346,25 @@ void ExpressionTrack::_ready() {
         UtilityFunctions::print("failed to set tracking mode for body tracking feature handle");
       }
 
-      nvErr = NvAR_SetF32(_bodyFeature, NvAR_Parameter_Config(UseCudaGraph), _useCudaGraph);
+      nvErr = NvAR_SetF32(_bodyFeature, NvAR_Parameter_Config(UseCudaGraph), _bodyUseCudaGraph);
       if (nvErr!=NVCV_SUCCESS) {
         UtilityFunctions::print("failed to set use CUDA grpah for body tracking feature handle");
+      }
+
+      // set gaze track config
+      nvErr = NvAR_SetU32(_gazeFeature, NvAR_Parameter_Config(GazeRedirect), _gazeRedirect);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set enable redirect for gaze tracking feature handle");
+      }
+
+      nvErr = NvAR_SetU32(_gazeFeature, NvAR_Parameter_Config(UseCudaGraph), _gazeUseCudaGraph);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set sensitivity for gaze tracking feature handle");
+      }
+     
+      nvErr = NvAR_SetU32(_gazeFeature, NvAR_Parameter_Config(EyeSizeSensitivity), _gazeSensitivity);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set sensitivity for gaze tracking feature handle");
       }
 
       // load features
@@ -271,6 +378,12 @@ void ExpressionTrack::_ready() {
         UtilityFunctions::print("failed to load body tracking feature handle");
       }
 
+      nvErr = NvAR_Load(_gazeFeature);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to load gaze tracking feature handle");
+      }
+
+      // set feature IO
       _expressionOutputBboxData.assign(25, {0.f, 0.f, 0.f, 0.f});
       _expressionOutputBboxes.boxes = _expressionOutputBboxData.data();
       _expressionOutputBboxes.max_boxes = (uint8_t)_expressionOutputBboxData.size();
@@ -397,6 +510,49 @@ void ExpressionTrack::_ready() {
         UtilityFunctions::print("failed to set bounding box confidence output for body track feature handle");
       }
 
+      // gaze IO
+      nvErr = NvAR_SetS32(_gazeFeature, NvAR_Parameter_Input(Width), width);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set image width input for gaze track feature handle");
+      }
+
+      nvErr = NvAR_SetS32(_gazeFeature, NvAR_Parameter_Input(Height), height);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set image height input for gaze track feature handle");
+      }
+
+      nvErr = NvAR_SetObject(_gazeFeature, NvAR_Parameter_Input(Image), &_srcGpu, sizeof(NvCVImage));
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set image input for gaze track feature handle");
+      }
+
+      nvErr = NvAR_SetF32Array(_gazeFeature, NvAR_Parameter_Output(OutputGazeVector), _gaze_angles_vector, 2);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set gaze vector output for gaze track feature handle");
+        UtilityFunctions::print("ERROR CODE: ", UtilityFunctions::str(nvErr));
+      }
+
+      nvErr = NvAR_SetObject(_gazeFeature, NvAR_Parameter_Output(GazeDirection), _gaze_direction, sizeof(NvAR_Point3f));
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set gaze direction output for gaze track feature handle");
+        UtilityFunctions::print("ERROR CODE: ", UtilityFunctions::str(nvErr));
+      }
+
+      nvErr = NvAR_GetU32(_gazeFeature, NvAR_Parameter_Config(Landmarks_Size), &_gazeNumLandmarks);
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to get number of gaze landmarks for gaze track feature handle");
+        UtilityFunctions::print("ERROR CODE: ", UtilityFunctions::str(nvErr));
+      }
+
+      _gazeFacialLandmarks.assign(_gazeNumLandmarks, {0.f, 0.f});
+      nvErr = NvAR_SetObject(_gazeFeature, NvAR_Parameter_Output(Landmarks), _gazeFacialLandmarks.data(), sizeof(NvAR_Point2f));
+      if (nvErr!=NVCV_SUCCESS) {
+        UtilityFunctions::print("failed to set gaze landmarks output for gaze track feature handle");
+        UtilityFunctions::print("ERROR CODE: ", UtilityFunctions::str(nvErr));
+      }
+
+      
+
       // capture image
       if (_vidIn.read(_ocvSrcImg)) {        
         // process image
@@ -423,6 +579,14 @@ void ExpressionTrack::_ready() {
         } else {
           UtilityFunctions::print("successfully initialized body tracking feature");
         }
+
+        nvErr = NvAR_Run(_gazeFeature);
+        if (nvErr!=NVCV_SUCCESS) {
+          UtilityFunctions::print("failed to run gaze tracking feature");
+        } else {
+          UtilityFunctions::print("successfully initialized gaze tracking feature");
+        }
+
 
       } else {
         UtilityFunctions::print("failed to capture video frame");
@@ -453,15 +617,28 @@ void ExpressionTrack::_process(double delta) {
         // lock to ensure thread-safe access to _ocvSrcImg
         std::lock_guard<std::mutex> lock(processing_mutex);
 
-        cv::imshow("Src Image", _ocvSrcImg);
-
         // assumes _ocvSrcImg has already been updated by processing_loop
         // transfer image to GPU
         nvErr = NvCVImage_Transfer(&_srcImg, &_srcGpu, 1.f, _expressionStream, nullptr);
+
+
         if (nvErr!=NVCV_SUCCESS) {
             UtilityFunctions::print("failed to transfer image to gpu");
             return;
         }
+
+
+        // run gaze tracking feature
+        nvErr = NvAR_Run(_gazeFeature);
+        if (nvErr!=NVCV_SUCCESS) {
+          UtilityFunctions::print("failed to run gaze tracking feature");
+        }
+
+        // run body track feature
+        nvErr = NvAR_Run(_bodyFeature);
+        if (nvErr!=NVCV_SUCCESS) {
+          UtilityFunctions::print("failed to run body tracking feature");
+        } 
 
         // run facial expression feature
         nvErr = NvAR_Run(_expressionFeature);
@@ -471,6 +648,8 @@ void ExpressionTrack::_process(double delta) {
         }
 
         normalizeExpressionsWeights();
+        
+        cv::imshow("Src Image", _ocvSrcImg);
     }
 
     // additional process logic
@@ -662,3 +841,79 @@ void ExpressionTrack::normalizeExpressionsWeights() {
     _expressions[i] = _globalExpressionParam * _expressions[i] + (1.0f - _globalExpressionParam) * tempExpr;
   }
 }
+
+// Function to convert NvAR_Point2f to Godot Vector2
+Vector2 point2f_to_vector2(const NvAR_Point2f& point) {
+    return Vector2(point.x, point.y);
+}
+
+// Function to convert NvAR_Point3f to Godot Vector3
+Vector3 point3f_to_vector3(const NvAR_Point3f& point) {
+    return Vector3(point.x, point.y, point.z);
+}
+
+// Function to convert NvAR_Quaternion to Godot Quaternion
+Quaternion quaternion_to_godot(const NvAR_Quaternion& quat) {
+    return Quaternion(quat.x, quat.y, quat.z, quat.w);
+}
+
+Array ExpressionTrack::get_keypoints() const {
+    Array keypoints;
+    for (const auto& kp : _keypoints) {
+        keypoints.push_back(point2f_to_vector2(kp));
+    }
+    return keypoints;
+}
+
+Array ExpressionTrack::get_keypoints3D() const {
+    Array keypoints3D;
+    for (const auto& kp : _keypoints3D) {
+        keypoints3D.push_back(point3f_to_vector3(kp));
+    }
+    return keypoints3D;
+}
+
+Array ExpressionTrack::get_joint_angles() const {
+    Array jointAngles;
+    for (const auto& ja : _jointAngles) {
+        jointAngles.push_back(quaternion_to_godot(ja));
+    }
+    return jointAngles;
+}
+
+Array ExpressionTrack::get_keypoints_confidence() const {
+    Array confidences;
+    for (const auto& conf : _keypoints_confidence) {
+        confidences.push_back(conf);
+    }
+    return confidences;
+}
+
+Array ExpressionTrack::get_body_bounding_boxes() const {
+    Array boxes;
+    for (size_t i = 0; i < _bodyOutputBboxes.num_boxes; ++i) {
+        boxes.push_back(bounding_box_to_dict(_bodyOutputBboxes.boxes[i]));
+    }
+    return boxes;
+}
+
+Array ExpressionTrack::get_body_bounding_box_confidence() const {
+    Array confidences;
+    for (const auto& confidence : _bodyOutputBboxConfData) {
+        confidences.push_back(confidence);
+    }
+    return confidences;
+}
+
+Array ExpressionTrack::get_gaze_angles_vector() const {
+  Array gaze_angles;
+  for (float angle : _gaze_angles_vector) {
+    gaze_angles.push_back(angle);
+  }
+  return gaze_angles;
+}
+
+Vector3 ExpressionTrack::get_gaze_direction() const {
+  return Vector3(_gaze_direction->x, _gaze_direction->y, _gaze_direction->z);
+}
+
