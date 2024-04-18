@@ -1,0 +1,14 @@
+[gd_scene load_steps=3 format=3 uid="uid://ccv35kbehlyit"]
+
+[ext_resource type="Texture2D" uid="uid://v88uwd5dero0" path="res://icon.svg" id="1_1ildj"]
+[ext_resource type="Script" path="res://face_sprite.gd" id="2_76t2v"]
+
+[node name="GameTest" type="Node2D"]
+
+[node name="ExpressionTrack" type="ExpressionTrack" parent="."]
+
+[node name="Sprite2D" type="Sprite2D" parent="." node_paths=PackedStringArray("expression_tracker")]
+position = Vector2(603, 314)
+texture = ExtResource("1_1ildj")
+script = ExtResource("2_76t2v")
+expression_tracker = NodePath("../ExpressionTrack")
