@@ -30,6 +30,7 @@ cache/
 *.dblite
 *.pdb
 *.lib
+!src/opencv/opencv_world346.lib
 bin
 *.config
 *.creator
