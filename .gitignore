@@ -31,7 +31,9 @@ cache/
 *.pdb
 *.lib
 !src/opencv/opencv_world346.lib
-bin
+*.dll
+!demo/bin/opencv_world346.dll
+*.exp
 *.config
 *.creator
 *.creator.user

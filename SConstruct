@@ -29,7 +29,7 @@ if env["platform"] == "macos":
     )
 else:
     library = env.SharedLibrary(
-        "demo/bin/libgdexample{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+        "demo/bin/gd_maxine{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
         source=sources,
     )
 
