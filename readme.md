@@ -66,6 +66,10 @@ This software is released under the MIT License. See LICENSE file for informatio
 
 This software contains source code provided by NVIDIA Corporation. See LICENSE.NVIDIA.txt file for information on permissions.
 
+This software contains source code from opencv. See LICENSE.OPENCV.txt file for information on permissions.
+
+The software contains source code from glm. See LICENSE.GLM.txt file for information on permissions.
+
 Powered by NVIDIA Broadcast.
 
 Created By: Ryan Powell, 2024.
