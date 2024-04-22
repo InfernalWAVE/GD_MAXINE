@@ -70,7 +70,7 @@ This software contains source code from opencv. See LICENSE.OPENCV.txt file for 
 
 This software contains source code from glm. See LICENSE.GLM.txt file for information on permissions.
 
-This software contains source code from the Godot engine. See LICENSE.GODOT.txt for information on permissions.
+This software contains source code from the Godot engine. See LICENSE.GODOT.md for information on permissions.
 
 Powered by NVIDIA Broadcast.
 
