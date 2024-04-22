@@ -1,13 +1,10 @@
 # GD_MAXINE
-implementation of NVIDIA AR SDK facial expression tracking for Godot 4.3.
+implementation of NVIDIA AR SDK features for Godot 4.3+
 
 # NOTE
 - idk what i'm doing really but i'm trying my best. if things are sloppy, forgive me.
-- this is all done and setup on windows. the dlls in the demo project bin are for windows.
-- extension is still named "gdexample", the intended named for the extension is "GD_MAXINE"
-- the face mesh in the demo needs blend shapes for: BrowInnerUpRight and BrowInnerUpLeft. it is setup for BrowInnerUp, but that blendshape is missing from the XRFaceTracker at time of release. NVIDIA's SDK reports each blendshape separately though, so it should work with a properly setup mesh.
-- still need to work out position posing for the head mesh in the demo. will need to define an origin and scale for the pose translation.
-- the opencv and glm libraries i just took from the samples on the nvidia repo. these versions may be outdated at this point, idk. but i knew they would be compatible with the sdk.
+- this is all made and tested on Windows. there may be a way to use this on a Linux system, but I am unsure.
+- the demo app only implements features from the facial expression and gaze trackers. body tracking is enabled, but not being used by the demo (for now)
 
 # BUILD INSTRUCTIONS:
 - download and install NVIDIA Broadcast: https://www.nvidia.com/en-us/geforce/broadcasting/broadcast-app/
@@ -15,9 +12,10 @@ implementation of NVIDIA AR SDK facial expression tracking for Godot 4.3.
   - NOTE: the extension relies on the environment variable set when installing the AR SDK
 - clone repo
 - open in VS Code
-- build with scons
+- build with scons (this relies on the opencv_world346.lib being in src/opencv to work)
+- ensure opencv_world346.dll is in the project bin (it should be by default)
 
-# RELEASE INSTALL INSTRUCTIONS:
+# RELEASE INSTALL INSTRUCTIONS (release is likely behind src):
 - download and install NVIDIA Broadcast: https://www.nvidia.com/en-us/geforce/broadcasting/broadcast-app/
 - download and install NVIDIA AR SDK: https://www.nvidia.com/en-us/geforce/broadcasting/broadcast-sdk/resources/
   - NOTE: the extension relies on the environment variable set when installing the AR SDK
@@ -47,6 +45,23 @@ The following functions are available:
 - get_bounding_boxes(),
   - returns Array, bounding boxes for detected face as Dictionary
     - Dictionary members are: x, y, width, height, as float
+- get_body_bounding_boxes()
+  - returns Array of bounding boxes for detected body as Dictionary
+    - Dictionary members are: x, y, width, height, as float
+- get_body_bounding box_confidence()
+  - returns Array of float for confidence in body tracking bounding boxes
+- get_gaze_angles_vector()
+  - returns Array of float for pitch and yaw rotations of the eyes
+- get_gaze_direction()
+  - returns Vector3 for vector from eyes to look location in 3D
+- get_joint_angles()
+  - returns Array of Quaternion for joint rotations
+- get_keypoints()
+  - returns Array of Vector2 for 2D joint positions
+- get_keypoints_3D()
+  - returns Array of Vector3 for 3D joint positions
+- get_keypoints_confidence()
+  - returns array of float for confidence in joint keypoint identification
 
 these are also exposed as properties on the node for convenience. there technically are setters, but they do nothing.
 
