@@ -41,6 +41,11 @@ using namespace godot;
 
 
 void ExpressionTrack::_bind_methods() {
+  // general
+  ClassDB::bind_method(D_METHOD("set_camera_device_id", "camera_device_id"), &ExpressionTrack::set_camera_device_id);
+  ClassDB::bind_method(D_METHOD("get_camera_device_id"), &ExpressionTrack::get_camera_device_id);
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::INT, "camera_device_id"), "set_camera_device_id", "get_camera_device_id");
+  
   // face tracking
   ClassDB::bind_method(D_METHOD("get_landmarks"), &ExpressionTrack::get_landmarks);
   ClassDB::bind_method(D_METHOD("get_landmark_count"), &ExpressionTrack::get_landmark_count);
@@ -235,7 +240,7 @@ void ExpressionTrack::_ready() {
     }
 
     // open video capture
-    if (_vidIn.open(0)) {
+    if (_vidIn.open(_camera_device_id)) {
       UtilityFunctions::print("successfully opened video capture");
 
       // intialize face expression feature
@@ -917,3 +922,10 @@ Vector3 ExpressionTrack::get_gaze_direction() const {
   return Vector3(_gaze_direction->x, _gaze_direction->y, _gaze_direction->z);
 }
 
+void ExpressionTrack::set_camera_device_id(int p_device_id) {
+  _camera_device_id = p_device_id;
+}
+
+int ExpressionTrack::get_camera_device_id() const {
+  return _camera_device_id;
+}

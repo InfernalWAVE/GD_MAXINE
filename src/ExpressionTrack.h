@@ -79,6 +79,8 @@ private:
     NvAR_Point3f _gaze_direction[2] = {{0.f, 0.f, 0.f}};
     unsigned int _gazeNumLandmarks;
     std::vector<NvAR_Point2f> _gazeFacialLandmarks;
+
+    int _camera_device_id = 0;
     
 
 protected:
@@ -147,6 +149,8 @@ public:
     void set_gaze_angles_vector(const godot::Array& p_value) {};
     void set_gaze_direction(const godot::Vector3& p_value) {};
 
+    void set_camera_device_id(int p_device_id);
+    int get_camera_device_id() const;
 };
 
 }
