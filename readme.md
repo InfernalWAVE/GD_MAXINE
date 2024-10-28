@@ -65,9 +65,9 @@ The following functions are available:
 
 these are also exposed as properties on the node for convenience. there technically are setters, but they do nothing.
 
-NOTE: _ready() and _process() are overridden on the ExpressionTrack node. attaching a script that uses these functions will break the tracking. I reccomend not attaching any scripts to the ExpressionTrack node unless you understand what the extension is doinig.
+NOTE: _ready() and _process() are overridden on the ExpressionTrack node. attaching a script that uses these functions will break the tracking. I reccomend not attaching any scripts to the ExpressionTrack node unless you understand what the extension is doing.
 
-NOTE: the extension automatically uses your default system camera for now. adding a camera select option is feasible in the future.
+NOTE: use the "camera device id" property on the ExpressionTrack node to select which camera device you want use
 
 # DEMO INFO:
 when the game runs the extension will create an OpenCV VideoCapture object, and begin capturing frames and running the facial expression feature on them.
