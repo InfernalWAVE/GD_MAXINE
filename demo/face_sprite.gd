@@ -28,10 +28,3 @@ func _process(delta: float) -> void:
 	if jaw_coefficient > COEFF_THRESHOLD:
 		translation_offset = gaze * jaw_coefficient * MOVE_SPEED
 		translate(translation_offset)
-
-
-
-
-
-
-

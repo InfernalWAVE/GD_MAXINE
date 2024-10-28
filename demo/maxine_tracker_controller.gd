@@ -27,9 +27,11 @@ const EXPRESSION_MAP: Array[int] = [
 const GAZE_OFFSET = deg_to_rad(10.0)
 
 func _ready() -> void:
+	xr_face_tracker.name = expression_tracker_name
+	
 	set_face_tracker(expression_tracker_name)
 	
-	XRServer.add_face_tracker(expression_tracker_name, xr_face_tracker)
+	XRServer.add_tracker(xr_face_tracker)
 
 func _process(delta: float) -> void:
 	expression_coefficients = expression_tracker.get_expressions()
