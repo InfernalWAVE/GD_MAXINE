@@ -45,6 +45,10 @@ void ExpressionTrack::_bind_methods() {
   ClassDB::bind_method(D_METHOD("set_camera_device_id", "camera_device_id"), &ExpressionTrack::set_camera_device_id);
   ClassDB::bind_method(D_METHOD("get_camera_device_id"), &ExpressionTrack::get_camera_device_id);
   ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::INT, "camera_device_id"), "set_camera_device_id", "get_camera_device_id");
+
+  ClassDB::bind_method(D_METHOD("set_show_capture", "show_capture"), &ExpressionTrack::set_show_capture);
+  ClassDB::bind_method(D_METHOD("get_show_capture"), &ExpressionTrack::get_show_capture);
+  ClassDB::add_property("ExpressionTrack", PropertyInfo(Variant::BOOL, "show_capture"), "set_show_capture", "get_show_capture");
   
   // face tracking
   ClassDB::bind_method(D_METHOD("get_landmarks"), &ExpressionTrack::get_landmarks);
@@ -654,7 +658,9 @@ void ExpressionTrack::_process(double delta) {
 
         normalizeExpressionsWeights();
         
-        cv::imshow("Src Image", _ocvSrcImg);
+        if(_show_capture){
+          cv::imshow("Src Image", _ocvSrcImg);
+        }
     }
 
     // additional process logic
@@ -922,10 +928,18 @@ Vector3 ExpressionTrack::get_gaze_direction() const {
   return Vector3(_gaze_direction->x, _gaze_direction->y, _gaze_direction->z);
 }
 
-void ExpressionTrack::set_camera_device_id(int p_device_id) {
+void ExpressionTrack::set_camera_device_id(const int p_device_id) {
   _camera_device_id = p_device_id;
 }
 
 int ExpressionTrack::get_camera_device_id() const {
   return _camera_device_id;
+}
+
+void ExpressionTrack::set_show_capture(const bool p_should_show){
+  _show_capture = p_should_show;
+}
+
+bool ExpressionTrack::get_show_capture() const {
+  return _show_capture;
 }
